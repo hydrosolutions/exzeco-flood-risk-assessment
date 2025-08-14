@@ -453,7 +453,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - **Issues**: [GitHub Issues](https://github.com/hydrosolutions/exzeco-flood-risk-assessment/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/hydrosolutions/exzeco-flood-risk-assessment/discussions)
-- **Email**: [Contact the maintainers](mailto:info@hydrosolutions.ch)
+- **Email**: [Contact the maintainers](mailto:siegfried@hydrosolutions.ch)
 
 ---
 
