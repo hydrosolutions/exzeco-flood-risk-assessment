@@ -701,13 +701,32 @@ class DEMDownloader:
             # Use nanmin/nanmax/nanmean/nanstd to handle nodata properly
             valid_data = dem_data[~np.isnan(dem_data)] if np.any(np.isnan(dem_data)) else dem_data
             
+            # Calculate actual ground resolution in meters
+            if src.crs.is_geographic:
+                # Geographic coordinates (lat/lon) - convert to meters
+                minx, miny, maxx, maxy = src.bounds
+                lon_extent = maxx - minx
+                lat_extent = maxy - miny
+                
+                # Approximate conversion to meters
+                lat_center = (maxy + miny) / 2
+                lon_extent_m = lon_extent * 111320 * np.cos(np.radians(lat_center))
+                lat_extent_m = lat_extent * 111320
+                
+                resolution_x = lon_extent_m / src.width
+                resolution_y = lat_extent_m / src.height
+                resolution_m = (resolution_x + resolution_y) / 2  # Average
+            else:
+                # Projected coordinates - use directly
+                resolution_m = src.res[0]
+            
             stats = {
                 'min_elevation': float(np.nanmin(dem_data)),
                 'max_elevation': float(np.nanmax(dem_data)),
                 'mean_elevation': float(np.nanmean(dem_data)),
                 'std_elevation': float(np.nanstd(dem_data)),
                 'shape': dem_data.shape,
-                'resolution': src.res[0],
+                'resolution': resolution_m,
                 'width': src.width,
                 'height': src.height,
                 'crs': str(src.crs),

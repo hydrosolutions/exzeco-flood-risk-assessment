@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>EXZECO Flood Risk Assessment Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        h1 { color: #2c3e50; }
+        h2 { color: #34495e; border-bottom: 2px solid #3498db; padding-bottom: 5px; }
+        table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #3498db; color: white; }
+        .summary-box { background: #ecf0f1; padding: 20px; border-radius: 5px; margin: 20px 0; }
+        .risk-high { color: #e74c3c; font-weight: bold; }
+        .risk-medium { color: #f39c12; font-weight: bold; }
+        .risk-low { color: #27ae60; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>EXZECO Flood Risk Assessment Report</h1>
+
+    <div class="summary-box">
+        <h2>Study Area Summary</h2>
+        <ul>
+            <li><strong>Location:</strong> (74.3, 42.3, 74.9, 43.2)</li>
+            <li><strong>Area:</strong> 9113.00 km&sup2;</li>
+            <li><strong>DEM Resolution:</strong> 26.8 m</li>
+            <li><strong>Elevation Range:</strong> 550 - 4839 m</li>
+        </ul>
+    </div>
+
+    <div class="summary-box">
+        <h2>Analysis Parameters</h2>
+        <ul>
+            <li><strong>Noise Levels:</strong> 0.2m, 0.4m, 0.6m, 0.8m, 1.0m</li>
+            <li><strong>Monte Carlo Iterations:</strong> 100</li>
+            <li><strong>Minimum Drainage Area:</strong> 0.01 km&sup2;</li>
+            <li><strong>Analysis Date:</strong> 2025-08-14 21:48</li>
+        </ul>
+    </div>
+
+    <h2>Risk Assessment Results</h2>
+    <table border="1" class="dataframe risk-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Noise Level</th>
+      <th>Very High Risk (km²)</th>
+      <th>High Risk (km²)</th>
+      <th>Medium Risk (km²)</th>
+      <th>Low Risk (km²)</th>
+      <th>Very Low Risk (km²)</th>
+      <th>Total Flood Area (km²)</th>
+      <th>Total Risk Pixels</th>
+      <th>Max Probability</th>
+      <th>Mean Probability</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>exzeco_20cm</td>
+      <td>178.252692</td>
+      <td>46.834014</td>
+      <td>27.713864</td>
+      <td>47.064819</td>
+      <td>146.000381</td>
+      <td>239.522448</td>
+      <td>620103</td>
+      <td>1.0</td>
+      <td>0.050296</td>
+    </tr>
+    <tr>
+      <td>exzeco_40cm</td>
+      <td>133.175960</td>
+      <td>69.313421</td>
+      <td>54.544773</td>
+      <td>83.281082</td>
+      <td>241.339409</td>
+      <td>230.204683</td>
+      <td>808956</td>
+      <td>1.0</td>
+      <td>0.051379</td>
+    </tr>
+    <tr>
+      <td>exzeco_60cm</td>
+      <td>109.845235</td>
+      <td>80.911196</td>
+      <td>72.024122</td>
+      <td>105.480790</td>
+      <td>305.415497</td>
+      <td>226.470818</td>
+      <td>936939</td>
+      <td>1.0</td>
+      <td>0.052773</td>
+    </tr>
+    <tr>
+      <td>exzeco_80cm</td>
+      <td>93.028102</td>
+      <td>88.538548</td>
+      <td>86.403062</td>
+      <td>123.592157</td>
+      <td>355.379400</td>
+      <td>224.496392</td>
+      <td>1038834</td>
+      <td>1.0</td>
+      <td>0.054131</td>
+    </tr>
+    <tr>
+      <td>exzeco_100cm</td>
+      <td>81.500072</td>
+      <td>93.497621</td>
+      <td>96.802232</td>
+      <td>137.995543</td>
+      <td>392.495155</td>
+      <td>222.674398</td>
+      <td>1115813</td>
+      <td>1.0</td>
+      <td>0.055268</td>
+    </tr>
+  </tbody>
+</table>
+
+    <div class="summary-box">
+        <h2>Key Findings</h2>
+        <ul>
+            <li class="risk-high">High Risk Area (>60% probability): 93.50 km&sup2;</li>
+            <li class="risk-medium">Medium Risk Area (40-60% probability): 96.80 km&sup2;</li>
+            <li class="risk-low">Low Risk Area (20-40% probability): 138.00 km&sup2;</li>
+            <li><strong>Total Flood-Prone Area:</strong> 222.67 km&sup2;</li>
+        </ul>
+    </div>
+
+    <h2>Recommendations</h2>
+    <ol>
+        <li>Areas identified as high risk should be prioritized for detailed hydraulic modeling</li>
+        <li>Consider implementing flood mitigation measures in zones with >60% flood probability</li>
+        <li>Regular monitoring of drainage patterns in medium-risk areas is recommended</li>
+        <li>Update the assessment periodically with higher resolution DEM data when available</li>
+    </ol>
+
+    <hr>
+    <p><em>Report generated using EXZECO methodology (CEREMA) - 2025-08-14 21:48:00.166010</em></p>
+</body>
+</html>
