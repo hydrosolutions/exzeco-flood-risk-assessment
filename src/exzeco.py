@@ -370,28 +370,43 @@ class ExzecoAnalysis:
                         dependencies[key] = []
                     dependencies[key].append((i, j))
         
-        # Topological sort and accumulation
+        # Iterative topological sort and accumulation to avoid recursion limit
         visited = np.zeros((rows, cols), dtype=bool)
         
-        def accumulate(i, j):
-            if visited[i, j]:
-                return flow_acc[i, j]
+        def accumulate_iterative(start_i, start_j):
+            """Iterative implementation to avoid recursion depth issues"""
+            stack = [(start_i, start_j)]
+            processing_stack = []
             
-            visited[i, j] = True
+            # Build dependency chain using DFS
+            while stack:
+                i, j = stack.pop()
+                
+                if visited[i, j]:
+                    continue
+                    
+                processing_stack.append((i, j))
+                visited[i, j] = True
+                
+                # Add upstream cells to stack for processing
+                if (i, j) in dependencies:
+                    for ui, uj in dependencies[(i, j)]:
+                        if not visited[ui, uj]:
+                            stack.append((ui, uj))
             
-            if (i, j) in dependencies:
-                for ui, uj in dependencies[(i, j)]:
-                    if not visited[ui, uj]:
-                        accumulate(ui, uj)
-                    flow_acc[i, j] += flow_acc[ui, uj]
-            
-            return flow_acc[i, j]
+            # Process in reverse order to ensure upstream cells are processed first
+            while processing_stack:
+                i, j = processing_stack.pop()
+                
+                if (i, j) in dependencies:
+                    for ui, uj in dependencies[(i, j)]:
+                        flow_acc[i, j] += flow_acc[ui, uj]
         
         # Process all cells
         for i in range(rows):
             for j in range(cols):
                 if not visited[i, j] and flow_dir[i, j] != 0:
-                    accumulate(i, j)
+                    accumulate_iterative(i, j)
         
         return flow_acc
     
