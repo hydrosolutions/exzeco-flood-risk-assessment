@@ -1,7 +1,7 @@
 dem_resolution: !!python/tuple
-- 1080
-- 720
-export_timestamp: '2025-08-14T10:26:04.958894'
+- 3240
+- 2160
+export_timestamp: '2025-08-14T14:48:31.698331'
 iterations: 100
 min_drainage_area: 0.001
 n_jobs: -1
