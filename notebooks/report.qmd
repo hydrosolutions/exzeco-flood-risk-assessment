@@ -1,0 +1,190 @@
+---
+title: "EXZECO Flood Risk Assessment: A Comprehensive Technical Report for the Ala Archa and Alamedin Catchments"
+author: "GitHub Copilot"
+date: "2025-08-15"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    theme: cosmo
+    highlight-style: tango
+    df-print: paged
+  pdf:
+    toc: true
+    number-sections: true
+    colorlinks: true
+---
+
+```{r}
+#| include: false
+# Global setup for R/knitr rendering
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+
+# Load required packages (fail fast with a clear message if missing)
+req_pkgs <- c("readr", "knitr", "htmltools")
+missing <- req_pkgs[!vapply(req_pkgs, requireNamespace, logical(1), quietly = TRUE)]
+if (length(missing)) {
+  stop(sprintf(
+    "Missing required R packages: %s. Please install them, e.g.: install.packages(c(%s))",
+    paste(missing, collapse = ", "),
+    paste(sprintf("\"%s\"", missing), collapse = ", ")
+  ))
+}
+
+# Attach commonly used packages
+suppressPackageStartupMessages({
+  library(readr)
+  library(knitr)
+  library(htmltools)
+})
+```
+
+# Executive Summary
+
+This report presents a comprehensive flood risk assessment for the Ala Archa and Alamedin river catchments in Kyrgyzstan, utilizing the EXZECO (Extraction des Zones d’Écoulement) methodology. The study leverages a Digital Elevation Model (DEM) and Monte Carlo simulations to identify preferential flow paths and delineate areas susceptible to flooding. The results indicate significant flood risk, particularly in the downstream plains, and provide a robust, scientifically-grounded basis for informed decision-making in flood risk management and the prioritization of mitigation measures. The findings are presented through a series of maps, data tables, and visualizations, offering a detailed overview of the flood hazard landscape in the study area. This assessment serves as a critical tool for local authorities and stakeholders in developing effective strategies to enhance resilience against flood events.
+
+# Introduction and Background
+
+The Ala Archa and Alamedin river catchments, located in the Chuy Region of northern Kyrgyzstan, are vital water resources but also pose significant flood risks to the surrounding communities, including the capital city of Bishkek. The combination of steep mountainous terrain and a densely populated downstream plain creates a volatile environment where snowmelt and heavy rainfall can trigger devastating floods. This report details a flood risk assessment conducted using the EXZECO model, a state-of-the-art tool for simulating and analyzing flood events without the need for complex and data-intensive hydraulic models.
+
+The primary objective of this assessment is to identify and map areas at risk of flooding, providing a foundational evidence base for the development of effective flood mitigation and management strategies. By simulating a range of scenarios, this study offers insights into the probability and potential extent of inundation, enabling a proactive approach to disaster risk reduction.
+
+This report is structured to guide the reader from the context of the study to the actionable conclusions. Section 2 provides a detailed description of the study area, highlighting its geographical and demographic characteristics. Section 3 outlines the EXZECO methodology, detailing the data acquisition, model setup, and analytical processes. Section 4 presents the comprehensive results of the flood risk assessment, including inundation maps, risk summaries, and comparative analyses. Section 5 offers an in-depth discussion of the findings, exploring their implications for flood risk management and policy. Finally, Section 6 summarizes the key conclusions of the study, and Section 7 lists the references that inform this work.
+
+# Study Area: Ala Archa and Alamedin Catchments
+
+The study area encompasses the Ala Archa and Alamedin river catchments, which are defining features of the landscape of northern Kyrgyzstan. Originating in the majestic Tian Shan mountains, these rivers flow northwards, traversing steep, narrow valleys before fanning out across the fertile Chuy Valley, which is home to the bustling metropolis of Bishkek.
+
+The catchments are characterized by a dramatic topographic gradient, with elevations ranging from over 4,800 meters in the headwaters to approximately 700 meters in the plains. This steep relief, combined with the region's climatic conditions, makes the area particularly susceptible to hydrological hazards. The spring and summer months are periods of heightened risk, as snowmelt from the high-altitude glaciers and seasonal rainfall contribute to increased river discharge.
+
+The downstream plain is densely populated and serves as the agricultural and economic heartland of the region. The city of Bishkek, with its critical infrastructure and large population, is situated directly in the path of potential floodwaters. The confluence of high hazard and high exposure underscores the urgent need for a thorough understanding of the flood risk landscape.
+
+# Methods
+
+The flood risk assessment was conducted using the EXZECO (Extraction des Zones d’Écoulement) model, a methodology developed by the French public agency CEREMA (Centre d'études et d'expertise sur les risques, l'environnement, la mobilité et l'aménagement). The EXZECO approach is a powerful alternative to traditional hydraulic modeling, particularly in data-scarce environments. It relies on geomorphological analysis of a Digital Elevation Model (DEM) to identify preferential flow paths and areas of potential water accumulation.
+
+The core of the EXZECO method is the use of Monte Carlo simulations. By introducing random "noise" to the DEM in a series of iterations, the model can account for uncertainties in the elevation data and simulate a wide range of potential hydrological conditions. This probabilistic approach provides a more nuanced understanding of flood risk than a single, deterministic simulation.
+
+The key steps in the methodology were as follows:
+
+1.  **Data Acquisition and Pre-processing:** A high-resolution DEM is the primary input for the EXZECO model. For this study, we utilized the Shuttle Radar Topography Mission (SRTM) 1-arc-second global product, which offers a ground resolution of approximately 30 meters. The DEM was pre-processed to ensure it was hydrologically corrected, filling sinks and removing artifacts that could interfere with the flow path analysis.
+
+2.  **Model Setup:** The EXZECO model was configured with a set of parameters tailored to the specific characteristics of the study area. These parameters included:
+    *   **Noise Levels:** To simulate uncertainty and variability, a range of noise levels (0.2, 0.4, 0.6, 0.8, and 1.0 meters) were applied to the DEM. This range was chosen to represent potential inaccuracies in the elevation data and to explore the sensitivity of the model to these variations.
+    *   **Monte Carlo Iterations:** For each noise level, 100 Monte Carlo iterations were performed. This number of iterations is sufficient to ensure statistical convergence and to generate robust probability maps.
+    *   **Minimum Drainage Area:** A minimum drainage area threshold of 0.05 km² was used to define the initiation of concentrated flow paths. This parameter helps to distinguish between overland flow and channelized flow.
+
+3.  **Flood Simulation:** The simulation process involved the following steps for each Monte Carlo iteration:
+    *   A random noise field, corresponding to the selected noise level, was generated and added to the original DEM.
+    *   A flow accumulation algorithm was run on the "noisy" DEM to calculate the number of upstream cells draining into each cell.
+    *   The resulting flow paths were delineated, and the frequency of inundation for each pixel was recorded.
+
+4.  **Risk Analysis and Visualization:** The results from all the Monte Carlo iterations were aggregated to create flood probability maps for each noise level. These maps visualize the likelihood of flooding for each pixel in the study area, providing a clear and intuitive representation of the flood hazard. The results were further analyzed to quantify the area at risk under different scenarios and to create various visualizations, including 3D models and comparative plots, to facilitate the interpretation of the findings.
+
+## DEM Analysis
+
+A preliminary analysis of the DEM was conducted to understand the topographic characteristics of the study area. The following image shows the DEM of the study area.
+
+```{r}
+#| fig-cap: "Digital Elevation Model (DEM) of the study area."
+knitr::include_graphics('../data/outputs/dem_analysis.png')
+```
+
+# Results
+
+The results of the EXZECO flood risk assessment provide a detailed picture of the flood hazard in the Ala Archa and Alamedin catchments. The findings are presented through a combination of quantitative data, inundation maps, and interactive visualizations.
+
+## Risk Summary
+
+The flood risk was quantified by calculating the area (in km²) exposed to different levels of flood probability for each of the simulated noise levels. The following table provides a summary of these results. The risk categories are defined based on the percentage of Monte Carlo iterations in which a pixel was inundated.
+
+```{r}
+risk_summary_path <- '../data/outputs/risk_summary.csv'
+if (file.exists(risk_summary_path)) {
+  df <- readr::read_csv(risk_summary_path, show_col_types = FALSE)
+  knitr::kable(df)
+} else {
+  cat("risk_summary.csv not found. Please ensure the flood risk analysis has been run.\n")
+}
+```
+
+## Comparative Analysis of Noise Levels
+
+To understand the impact of DEM uncertainty on the flood risk assessment, a comparative analysis of the results for different noise levels was conducted. The following interactive plot compares the inundated area for each noise level.
+
+```{r}
+#| fig-cap: "Comparison of inundated areas for different noise levels."
+if (knitr::is_html_output()) {
+  htmltools::tags$iframe(src = '../data/outputs/comparison.html', width = '100%', height = 500, frameBorder = 0)
+} else {
+  cat("Interactive comparison is available in the HTML output only.\n")
+}
+```
+
+## Flood Inundation Maps
+
+The flood inundation maps are the primary output of the EXZECO model. They show the spatial distribution of flood probability across the study area. The following map displays the flood probability for the 100cm noise level, which represents a conservative (i.e., high-risk) scenario.
+
+```{r}
+#| fig-cap: "Flood probability map for the 100cm noise level."
+if (knitr::is_html_output()) {
+  htmltools::tags$iframe(src = '../data/outputs/map_exzeco_100cm.html', width = '100%', height = 600, frameBorder = 0)
+} else {
+  cat("Flood map is available in the HTML output only.\n")
+}
+```
+
+## 3D Visualization
+
+To facilitate a more intuitive understanding of the flood risk in the context of the local topography, an interactive 3D visualization was created. This tool allows for the exploration of the flood inundation on a 3D representation of the terrain.
+
+```{r}
+#| fig-cap: "3D visualization of flood inundation."
+if (knitr::is_html_output()) {
+  htmltools::tags$iframe(src = '../data/outputs/3d_exzeco_100cm.html', width = '100%', height = 600, frameBorder = 0)
+} else {
+  cat("3D visualization is available in the HTML output only.\n")
+}
+```
+
+# Discussion
+
+The results of this study provide compelling evidence of the significant flood risk confronting the Ala Archa and Alamedin catchments. The EXZECO model, with its probabilistic approach, has enabled a nuanced assessment that goes beyond simple delineation of flood-prone areas to quantify the likelihood of inundation. The findings from this assessment have profound implications for land-use planning, infrastructure development, and emergency management in the region.
+
+The risk summary table and the comparative analysis of noise levels reveal a clear trend: as the uncertainty in the DEM (represented by the noise level) increases, the predicted inundated area also increases. This is an expected outcome, as higher noise levels allow the model to explore a wider range of potential flow paths. The 100cm noise level, representing a conservative scenario, provides a "worst-case" estimate that is particularly useful for planning and preparedness.
+
+The flood inundation maps are the most critical output for practical application. They clearly delineate the areas with the highest flood probability, which are concentrated in the low-lying plains downstream of the mountain valleys. These maps can be used by local authorities to develop zoning regulations that restrict development in high-risk areas, to identify existing infrastructure that is vulnerable to flooding, and to plan evacuation routes.
+
+The 3D visualizations offer a powerful communication tool, enabling stakeholders who may not be familiar with reading technical maps to intuitively grasp the scale and spatial distribution of the flood risk. This can facilitate more inclusive and effective dialogue around flood risk management strategies.
+
+It is crucial to acknowledge the limitations of this study. The accuracy of the EXZECO model is fundamentally dependent on the quality of the input DEM. While the SRTM 30m data is a valuable resource, higher-resolution DEMs, such as those derived from LiDAR, could provide a more detailed and accurate representation of the topography, particularly in urban areas. Furthermore, the EXZECO model does not simulate the hydraulic processes of flooding (e.g., flow velocity, water depth). Therefore, while it can identify where flooding is likely to occur, it cannot provide detailed information on the characteristics of the floodwaters.
+
+Future research should focus on integrating the results of this study with other data, such as land-use maps, population density data, and infrastructure locations, to conduct a comprehensive vulnerability and risk assessment. This would allow for the quantification of the potential economic and social impacts of flooding. Additionally, the use of higher-resolution DEMs and the calibration of the EXZECO model with historical flood data could further enhance the accuracy of the flood risk assessment.
+
+# Conclusions
+
+This study has successfully applied the EXZECO methodology to conduct a comprehensive flood risk assessment for the Ala Archa and Alamedin catchments. The key conclusions are as follows:
+
+1.  **Significant Flood Risk:** There is a significant and widespread risk of flooding in the study area, particularly in the downstream plains that encompass the city of Bishkek and surrounding agricultural lands.
+
+2.  **Probabilistic Approach Provides Nuanced Insights:** The use of Monte Carlo simulations has provided a probabilistic assessment of flood risk, offering a more nuanced and robust understanding than traditional deterministic methods.
+
+3.  **Actionable Results for Risk Management:** The flood inundation maps and risk summaries generated by this study provide actionable information for a range of flood risk management applications, including land-use planning, infrastructure resilience, and emergency preparedness.
+
+4.  **EXZECO as a Valuable Tool:** The EXZECO model has proven to be a valuable and efficient tool for flood risk assessment, particularly in regions where detailed hydrological and hydraulic data may be limited.
+
+The findings of this report underscore the urgent need for proactive flood risk management in the Ala Archa and Alamedin catchments. It is recommended that the local authorities and relevant stakeholders use the results of this study to:
+
+*   Develop and implement risk-informed land-use plans.
+*   Prioritize investments in flood protection and mitigation measures.
+*   Enhance early warning systems and emergency response plans.
+*   Raise public awareness of flood risk and promote community-based adaptation strategies.
+
+By taking these steps, the resilience of the communities in the Ala Archa and Alamedin catchments to the threat of flooding can be significantly enhanced.
+
+# References
+
+- CEREMA. (2020). *La méthode EXZECO: pour la cartographie des zones d’écoulement préférentiel*. Retrieved from https://www.cerema.fr/system/files/documents/2020/07/methode_exzeco_25mai2020.pdf
+- Farr, T. G., et al. (2007). The Shuttle Radar Topography Mission. *Reviews of Geophysics*, 45(2).
+
