@@ -14,3 +14,16 @@ __pycache__/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Quarto build artifacts
+.quarto/
+**/*_files/
+**/*.knit.md
+**/*.utf8.md
+# Ignore rendered notebooks/report HTML outputs
+notebooks/*.html
+
+# R artifacts
+.Rhistory
+.RData
+.Rproj.user/
