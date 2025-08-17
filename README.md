@@ -6,6 +6,32 @@
 
 A comprehensive Python implementation of the **EXZECO** (Extraction des Zones d'Écoulement) methodology for preliminary flood risk assessment using Monte Carlo simulation on Digital Elevation Models (DEMs).
 
+> Important notice (Aug 2025): Repository migrated to Git LFS for large notebooks
+
+We rewrote history to store `notebooks/*.ipynb` in Git LFS. If you have a local clone, please update it:
+
+```
+# One-time setup
+git lfs install
+
+# Update to the new history (THIS RESETS LOCAL CHANGES)
+git fetch --all --tags
+git reset --hard origin/main
+
+# Pull LFS content
+git lfs pull
+```
+
+If you have local work, back it up first:
+
+```
+git switch -c backup/local-before-lfs
+git fetch --all
+git reset --hard origin/main
+```
+
+Details and alternatives are in .github/ANNOUNCEMENT_LFS_MIGRATION.md.
+
 ## 🌊 Overview
 
 EXZECO is a probabilistic flood risk assessment method that uses uncertainty analysis on topographic data to identify potentially flooded areas. By applying Monte Carlo simulation with controlled DEM perturbation, the method generates flood probability maps that account for terrain uncertainty and provides robust flood risk estimates.
