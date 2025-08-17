@@ -1,1 +1,5 @@
+# Track large notebooks and data artifacts with Git LFS
 notebooks/*.ipynb filter=lfs diff=lfs merge=lfs -text
+# Optionally track large raster and HTML outputs if ever versioned
+# data/**/*.tif filter=lfs diff=lfs merge=lfs -text
+# notebooks/**/*.html filter=lfs diff=lfs merge=lfs -text
