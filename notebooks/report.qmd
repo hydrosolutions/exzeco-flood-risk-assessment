@@ -1,7 +1,7 @@
 ---
 title: "EXZECO Flood Risk Assessment: A Comprehensive Technical Report for the Ala Archa and Alamedin Catchments"
-author: "GitHub Copilot"
-date: "2025-08-15"
+author: "Dr. Tobias Siegfried, hydrosolutions.ch"
+date: "2025-08-17"
 format:
   html:
     toc: true
