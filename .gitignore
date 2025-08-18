@@ -23,8 +23,10 @@ Thumbs.db
 # Ignore rendered notebooks/report HTML outputs
 notebooks/*.html
 
+# Rendered docs (root)
+/README.html
+
 # R artifacts
 .Rhistory
 .RData
 .Rproj.user/
-/.quarto/
