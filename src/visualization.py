@@ -320,6 +320,46 @@ class ExzecoVisualizer:
             control=True,
             zindex=0
         ).add_to(m)
+        
+        # Add shapefile overlay on hillshade
+        self._add_shapefile_overlay(m)
+    
+    def _add_shapefile_overlay(self, m: folium.Map):
+        """Add shapefile overlay as black border on hillshade."""
+        try:
+            # Path to the GeoPackage file
+            shapefile_path = Path("../data/doi/qmp_doi.gpkg")
+            if not shapefile_path.exists():
+                logger.warning(f"Shapefile not found: {shapefile_path}")
+                return
+            
+            # Read the shapefile/geopackage
+            gdf = gpd.read_file(shapefile_path)
+            
+            # Convert to GeoJSON for folium
+            shapefile_geojson = gdf.__geo_interface__
+            
+            # Add shapefile as black border overlay
+            folium.GeoJson(
+                shapefile_geojson,
+                style_function=lambda feature: {
+                    'fillColor': 'transparent',
+                    'color': 'black',
+                    'weight': 2,
+                    'fillOpacity': 0,
+                    'opacity': 1
+                },
+                name='Study Area Boundary',
+                overlay=True,
+                control=True,
+                zindex=10  # High z-index to appear on top
+            ).add_to(m)
+            
+            logger.info("Shapefile overlay added successfully")
+            
+        except Exception as e:
+            logger.warning(f"Could not add shapefile overlay: {e}")
+            print(f"Warning: Could not add shapefile overlay: {e}")
     
     def _add_legend(self, m: folium.Map, noise_level: str):
         """Add legend to map."""
@@ -999,12 +1039,18 @@ class DEMVisualizer:
         ax.set_ylabel('Pixels North')
         ax.grid(True, alpha=0.3)
         
+        # Add shapefile overlay on hillshade
+        self._add_shapefile_to_plot(ax)
+        
         # Elevation
         ax = axes[0, 1]
         im2 = ax.imshow(self.dem_data, cmap='terrain')
         ax.set_title(f'Elevation ({self.dem_stats["min_elevation"]:.0f} - {self.dem_stats["max_elevation"]:.0f} m)')
         plt.colorbar(im2, ax=ax, label='Elevation (m)')
         ax.grid(True, alpha=0.3)
+        
+        # Add shapefile overlay on elevation
+        self._add_shapefile_to_plot(ax)
         
         # Slope
         ax = axes[1, 0]
@@ -1013,12 +1059,18 @@ class DEMVisualizer:
         plt.colorbar(im3, ax=ax, label='Slope')
         ax.grid(True, alpha=0.3)
         
+        # Add shapefile overlay on slope
+        self._add_shapefile_to_plot(ax)
+        
         # Aspect
         ax = axes[1, 1]
         im4 = ax.imshow(self.aspect, cmap='hsv')
         ax.set_title('Aspect')
         plt.colorbar(im4, ax=ax, label='Aspect')
         ax.grid(True, alpha=0.3)
+        
+        # Add shapefile overlay on aspect
+        self._add_shapefile_to_plot(ax)
         
         plt.suptitle('DEM Analysis', fontsize=16, fontweight='bold')
         plt.tight_layout()
@@ -1081,6 +1133,102 @@ class DEMVisualizer:
         except Exception as e:
             print(f"❌ Error during DEM visualization: {e}")
             return None
+    
+    def _add_shapefile_to_plot(self, ax):
+        """
+        Add shapefile overlay as black border on matplotlib plot.
+        
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes
+            Matplotlib axis to add the shapefile to
+        """
+        try:
+            # Path to the GeoPackage file
+            shapefile_path = Path("../data/doi/qmp_doi.gpkg")
+            if not shapefile_path.exists():
+                # Try relative path from current working directory
+                shapefile_path = Path("data/doi/qmp_doi.gpkg")
+                if not shapefile_path.exists():
+                    logger.warning(f"Shapefile not found: {shapefile_path}")
+                    return
+            
+            # Read the shapefile/geopackage
+            gdf = gpd.read_file(shapefile_path)
+            
+            # Transform coordinates to pixel space if needed
+            # Assuming the shapefile bounds roughly match the DEM bounds
+            # You may need to adjust this transformation based on your specific data
+            
+            # Get shapefile bounds
+            shapefile_bounds = gdf.total_bounds
+            
+            # Get DEM dimensions
+            dem_height, dem_width = self.dem_data.shape
+            
+            # Transform shapefile coordinates to pixel coordinates
+            # Simple linear transformation (may need adjustment based on actual coordinate systems)
+            if hasattr(self, 'transform') and self.transform:
+                # Use rasterio transform if available
+                x_pixels = []
+                y_pixels = []
+                
+                for geom in gdf.geometry:
+                    if geom.geom_type == 'Polygon':
+                        coords = list(geom.exterior.coords)
+                    elif geom.geom_type == 'MultiPolygon':
+                        coords = []
+                        for poly in geom.geoms:
+                            coords.extend(list(poly.exterior.coords))
+                    else:
+                        continue
+                        
+                    for x, y in coords:
+                        # Transform geographic coordinates to pixel coordinates
+                        col = int((x - self.transform.c) / self.transform.a)
+                        row = int((y - self.transform.f) / self.transform.e)
+                        x_pixels.append(col)
+                        y_pixels.append(dem_height - row)  # Flip Y for image coordinates
+                
+                # Plot the shapefile boundary
+                if x_pixels and y_pixels:
+                    ax.plot(x_pixels, y_pixels, color='black', linewidth=2, label='Study Area Boundary')
+                    
+            else:
+                # Fallback: simple scaling based on bounds
+                x_scale = dem_width / (shapefile_bounds[2] - shapefile_bounds[0])
+                y_scale = dem_height / (shapefile_bounds[3] - shapefile_bounds[1])
+                
+                # Track if we've added any boundaries for legend purposes
+                boundary_added = False
+                
+                for geom in gdf.geometry:
+                    if geom.geom_type == 'Polygon':
+                        coords = list(geom.exterior.coords)
+                    elif geom.geom_type == 'MultiPolygon':
+                        coords = []
+                        for poly in geom.geoms:
+                            coords.extend(list(poly.exterior.coords))
+                    else:
+                        continue
+                    
+                    # Transform coordinates to pixel space
+                    x_pixels = [(x - shapefile_bounds[0]) * x_scale for x, _ in coords]
+                    y_pixels = [dem_height - (y - shapefile_bounds[1]) * y_scale for _, y in coords]
+                    
+                    # Only add label to the first boundary for legend
+                    label = 'Study Area Boundary' if not boundary_added else None
+                    ax.plot(x_pixels, y_pixels, color='black', linewidth=2, alpha=0.8, label=label)
+                    boundary_added = True
+                    
+            # Only show legend if we actually added boundaries
+            if boundary_added:
+                ax.legend(loc='upper right', fontsize=8)
+            logger.info("Shapefile overlay added to plot")
+            
+        except Exception as e:
+            logger.warning(f"Could not add shapefile overlay to plot: {e}")
+            print(f"Warning: Could not add shapefile overlay to plot: {e}")
 
 
 def create_dem_visualization(dem_path: Union[str, Path], 

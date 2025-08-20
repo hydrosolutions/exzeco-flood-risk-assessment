@@ -13,7 +13,7 @@ Task line format:
 - [ ] [P1] Short task title — @owner (due: 2025-09-01) #123
 
 ## Now
-- [ ] [P1] Add the option to carry out analysis of a user-defined shapefile. For example, we want to upload a shapefile which consists of 2 features, i.e. the Ala Archa basin outline and the Alamedin basin outline. The EXZECO analysis should then be carried out on the entire joint domain, that is,  statistics needs to be reported for the entire domain and the individual subcatchments. This must hold of an arbitrary number of subcatchments for an arbitrary shapefile given. If the shapefile location is not specified in the config.yml or the file that is specified is not found, the bounding box approach should be chosen. If not shapefile and bounding box is available, throw and error. — @owner
+- [x] [P1] Add the option to carry out analysis of a user-defined shapefile. For example, we want to upload a shapefile which consists of 2 features, i.e. the Ala Archa basin outline and the Alamedin basin outline. The EXZECO analysis should then be carried out on the entire joint domain, that is,  statistics needs to be reported for the entire domain and the individual subcatchments. This must hold of an arbitrary number of subcatchments for an arbitrary shapefile given. If the shapefile location is not specified in the config.yml or the file that is specified is not found, the bounding box approach should be chosen. If not shapefile and bounding box is available, throw and error. — @owner (completed: 2025-08-18)
 
 ## Next
 - [ ] [P2] Interactive 3D visualization does not really show any results. — @owner
@@ -25,3 +25,4 @@ Task line format:
 
 ## Done (recent)
 - [x] [P1] Configure Git LFS for large notebooks — @owner (2025-08-17)
+- [x] [P1] Add shapefile-based analysis support with automatic fallback to bounding box — @owner (2025-08-18)

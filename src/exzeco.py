@@ -19,10 +19,10 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 from scipy import ndimage
-from shapely.geometry import Point, Polygon, box
+from shapely.geometry import Point, Polygon, MultiPolygon, box
 import rasterio
 from rasterio import features
-from rasterio.transform import from_bounds
+from rasterio.transform import from_bounds, Affine
 from rasterio.warp import reproject, Resampling
 import xarray as xr
 import rioxarray as rxr
@@ -50,6 +50,8 @@ class ExzecoConfig:
     n_jobs: int = -1  # Number of parallel jobs
     chunk_size: int = 1000  # Chunk size for processing
     seed: Optional[int] = 42  # Random seed for reproducibility
+    shapefile_path: Optional[str] = None  # Path to shapefile for study area definition
+    bounds: Optional[Tuple] = None  # Fallback bounding box
     
     def __post_init__(self):
         if self.noise_levels is None:
@@ -101,6 +103,145 @@ class ExzecoAnalysis:
         self.dem_data = None
         self.transform = None
         self.crs = None
+        self.study_areas = None  # For storing individual subcatchments
+        self.total_study_area = None  # For storing entire domain
+        
+    def load_study_areas(self, shapefile_path: Optional[str] = None, bounds: Optional[Tuple] = None) -> Tuple[gpd.GeoDataFrame, Tuple]:
+        """
+        Load study areas from shapefile or bounds.
+        
+        Parameters
+        ----------
+        shapefile_path : str, optional
+            Path to shapefile/geopackage containing study area polygons
+        bounds : tuple, optional
+            Bounding box (minx, miny, maxx, maxy) as fallback
+            
+        Returns
+        -------
+        tuple
+            (GeoDataFrame of study areas, total bounds)
+            
+        Raises
+        ------
+        ValueError
+            If neither shapefile nor bounds are provided or valid
+        """
+        # Try shapefile first
+        if shapefile_path is not None:
+            shapefile_path = Path(shapefile_path)
+            if shapefile_path.exists():
+                try:
+                    logger.info(f"Loading study areas from {shapefile_path}")
+                    gdf = gpd.read_file(shapefile_path)
+                    
+                    if len(gdf) == 0:
+                        raise ValueError("Shapefile contains no features")
+                    
+                    # Ensure geometries are valid
+                    gdf = gdf[gdf.geometry.is_valid]
+                    
+                    if len(gdf) == 0:
+                        raise ValueError("Shapefile contains no valid geometries")
+                    
+                    # Store individual subcatchments and total area
+                    self.study_areas = gdf
+                    
+                    # Create dissolved geometry for total study area
+                    total_geom = gdf.geometry.unary_union
+                    if hasattr(total_geom, 'geoms'):
+                        # If it's a MultiPolygon, keep as is
+                        from shapely.geometry import MultiPolygon
+                        if not isinstance(total_geom, MultiPolygon):
+                            total_geom = MultiPolygon([total_geom])
+                    
+                    total_gdf = gpd.GeoDataFrame([{'name': 'total_domain'}], 
+                                               geometry=[total_geom], 
+                                               crs=gdf.crs)
+                    self.total_study_area = total_gdf
+                    
+                    total_bounds = gdf.total_bounds
+                    
+                    logger.info(f"Loaded {len(gdf)} subcatchments from shapefile")
+                    logger.info(f"Total study area bounds: {total_bounds}")
+                    
+                    return gdf, tuple(total_bounds)
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to load shapefile {shapefile_path}: {e}")
+            else:
+                logger.warning(f"Shapefile not found: {shapefile_path}")
+        
+        # Fall back to bounding box
+        if bounds is not None and len(bounds) == 4:
+            logger.info(f"Using bounding box: {bounds}")
+            
+            # Create a rectangular polygon from bounds
+            from shapely.geometry import box
+            geom = box(*bounds)
+            
+            # Create GeoDataFrame with single feature
+            gdf = gpd.GeoDataFrame([{'name': 'bounding_box'}], 
+                                 geometry=[geom], 
+                                 crs='EPSG:4326')  # Assume WGS84 for bounds
+            
+            self.study_areas = gdf
+            self.total_study_area = gdf.copy()
+            
+            return gdf, bounds
+        
+        # If nothing works, raise error
+        raise ValueError("Neither valid shapefile nor bounds provided. Please specify either a valid shapefile path in config.yml or bounding box coordinates.")
+    
+    def mask_raster_by_geometry(self, raster: np.ndarray, geometry: Union[Polygon, MultiPolygon], transform: Affine) -> np.ndarray:
+        """
+        Mask raster data by geometry.
+        
+        Parameters
+        ----------
+        raster : np.ndarray
+            Input raster array
+        geometry : shapely geometry
+            Geometry to use as mask
+        transform : Affine
+            Raster transform
+            
+        Returns
+        -------
+        np.ndarray
+            Masked raster array
+        """
+        from rasterio.mask import mask
+        from shapely.geometry import mapping
+        
+        # Create a temporary raster to work with
+        masked_data = raster.copy()
+        
+        # Use rasterio.mask to mask the data
+        try:
+            # Convert geometry to GeoJSON-like format
+            geom_dict = mapping(geometry)
+            
+            # Create mask - True for pixels inside geometry
+            mask_array = features.rasterize(
+                [geom_dict],
+                out_shape=raster.shape,
+                transform=transform,
+                fill=0,
+                default_value=1,
+                dtype=np.uint8
+            ).astype(bool)
+            
+            # Apply mask - set pixels outside geometry to NaN
+            masked_data[~mask_array] = np.nan
+            
+            return masked_data
+            
+        except Exception as e:
+            logger.warning(f"Failed to mask raster: {e}")
+            return raster
+    
+    
         
     def load_dem(self, dem_path: Union[str, Path], bounds: Optional[Tuple] = None) -> np.ndarray:
         """
@@ -129,12 +270,16 @@ class ExzecoAnalysis:
                 dem_bounds = rasterio.windows.bounds(window, src.transform)
                 # Convert tuple to BoundingBox-like access
                 minx, miny, maxx, maxy = dem_bounds
+                # Get dimensions from clipped DEM
+                height, width = dem.shape
             else:
                 dem = src.read(1)
                 self.transform = src.transform
                 dem_bounds = src.bounds
                 # dem_bounds is already a BoundingBox object
                 minx, miny, maxx, maxy = dem_bounds.left, dem_bounds.bottom, dem_bounds.right, dem_bounds.top
+                # Get dimensions from full DEM
+                height, width = src.height, src.width
             
             self.crs = src.crs
             
@@ -149,8 +294,8 @@ class ExzecoAnalysis:
                 lon_extent_m = lon_extent * 111320 * np.cos(np.radians(lat_center))
                 lat_extent_m = lat_extent * 111320
                 
-                self.resolution_x = lon_extent_m / src.width if bounds is None else lon_extent_m / dem.shape[1]
-                self.resolution_y = lat_extent_m / src.height if bounds is None else lat_extent_m / dem.shape[0]
+                self.resolution_x = lon_extent_m / width if width > 0 else src.res[0]
+                self.resolution_y = lat_extent_m / height if height > 0 else src.res[1]
                 self.resolution = (self.resolution_x + self.resolution_y) / 2  # Average
                 
                 logger.info(f"Geographic CRS detected. Calculated resolution: X={self.resolution_x:.1f}m, Y={self.resolution_y:.1f}m")
@@ -485,7 +630,10 @@ class ExzecoAnalysis:
         
         return probability_map
     
-    def run_full_analysis(self, dem_path: Union[str, Path], bounds: Optional[Tuple] = None) -> Dict:
+    def run_full_analysis(self, 
+                         dem_path: Union[str, Path], 
+                         bounds: Optional[Tuple] = None,
+                         shapefile_path: Optional[str] = None) -> Dict:
         """
         Run complete EXZECO analysis for all noise levels.
         
@@ -494,15 +642,24 @@ class ExzecoAnalysis:
         dem_path : str or Path
             Path to DEM file
         bounds : tuple, optional
-            Bounding box for analysis area
+            Bounding box for analysis area (fallback if no shapefile)
+        shapefile_path : str, optional
+            Path to shapefile/geopackage for study area definition
             
         Returns
         -------
         dict
             Results dictionary with probability maps for each noise level
         """
-        # Load DEM
-        self.load_dem(dem_path, bounds)
+        # Load study areas first
+        try:
+            study_areas_gdf, total_bounds = self.load_study_areas(shapefile_path, bounds)
+        except ValueError as e:
+            logger.error(f"Failed to load study areas: {e}")
+            raise
+        
+        # Load DEM using total bounds
+        self.load_dem(dem_path, total_bounds)
         
         # Run analysis for each noise level
         results = {}
@@ -510,7 +667,7 @@ class ExzecoAnalysis:
         for noise_level in self.config.noise_levels:
             logger.info(f"Processing noise level: {noise_level}m")
             
-            # Run Monte Carlo
+            # Run Monte Carlo for entire domain
             prob_map = self.run_monte_carlo(noise_level)
             
             # Apply incremental DEM modification for next level
@@ -528,12 +685,38 @@ class ExzecoAnalysis:
                 mask = drainage_area > 0.1
                 self.dem_data[mask] += noise_level
             
-            # Store results
+            # Store results for entire domain
             results[f"exzeco_{int(noise_level*100)}cm"] = {
                 'probability_map': prob_map,
                 'noise_level': noise_level,
-                'threshold': 0.5  # Default threshold for binary classification
+                'threshold': 0.5,  # Default threshold for binary classification
+                'total_domain': True
             }
+            
+            # If we have subcatchments, calculate statistics for each
+            if self.study_areas is not None and len(self.study_areas) > 1:
+                subcatchment_results = {}
+                
+                for idx, row in self.study_areas.iterrows():
+                    subcatch_name = row.get('NAME_EN', row.get('name', f'subcatchment_{idx}'))
+                    
+                    # Transform geometry to raster CRS if needed
+                    geom = row.geometry
+                    if self.study_areas.crs != self.crs:
+                        geom_gdf = gpd.GeoDataFrame([row], crs=self.study_areas.crs)
+                        geom_gdf = geom_gdf.to_crs(self.crs)
+                        geom = geom_gdf.geometry.iloc[0]
+                    
+                    # Mask probability map by subcatchment geometry
+                    masked_prob = self.mask_raster_by_geometry(prob_map, geom, self.transform)
+                    
+                    subcatchment_results[subcatch_name] = {
+                        'probability_map': masked_prob,
+                        'geometry': geom,
+                        'original_data': row
+                    }
+                
+                results[f"exzeco_{int(noise_level*100)}cm"]['subcatchments'] = subcatchment_results
         
         self.results = results
         return results
@@ -631,6 +814,7 @@ class ExzecoAnalysis:
         for name, data in self.results.items():
             prob_map = data['probability_map']
             
+            # Export total domain results
             if format == 'geotiff':
                 # Export as GeoTIFF
                 output_path = output_dir / f"{name}.tif"
@@ -680,6 +864,73 @@ class ExzecoAnalysis:
                     gdf.to_file(output_path, driver='GeoJSON')
             
             logger.info(f"Exported {name} to {output_path}")
+            
+            # Export subcatchment results if available
+            if 'subcatchments' in data:
+                subcatch_dir = output_dir / 'subcatchments'
+                subcatch_dir.mkdir(exist_ok=True)
+                
+                for subcatch_name, subcatch_data in data['subcatchments'].items():
+                    subcatch_prob = subcatch_data['probability_map']
+                    
+                    # Clean subcatchment name for filename
+                    clean_name = "".join(c for c in subcatch_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+                    clean_name = clean_name.replace(' ', '_')
+                    
+                    if format == 'geotiff':
+                        # Export subcatchment raster
+                        subcatch_output_path = subcatch_dir / f"{name}_{clean_name}.tif"
+                        
+                        with rasterio.open(
+                            subcatch_output_path,
+                            'w',
+                            driver='GTiff',
+                            height=subcatch_prob.shape[0],
+                            width=subcatch_prob.shape[1],
+                            count=1,
+                            dtype=subcatch_prob.dtype,
+                            crs=self.crs,
+                            transform=self.transform,
+                            compress='lzw'
+                        ) as dst:
+                            dst.write(subcatch_prob, 1)
+                    
+                    elif format in ['shapefile', 'geojson']:
+                        # Vectorize subcatchment results
+                        shapes = features.shapes(
+                            (subcatch_prob > 0.5).astype(np.uint8),
+                            transform=self.transform
+                        )
+                        
+                        geometries = []
+                        values = []
+                        
+                        for geom, value in shapes:
+                            if value == 1:  # Only flood zones
+                                geometries.append(Polygon(geom['coordinates'][0]))
+                                values.append(data['noise_level'])
+                        
+                        if geometries:  # Only create file if there are flood zones
+                            # Create GeoDataFrame
+                            subcatch_gdf = gpd.GeoDataFrame(
+                                {
+                                    'noise_level': values,
+                                    'subcatchment': subcatch_name
+                                },
+                                geometry=geometries,
+                                crs=self.crs
+                            )
+                            
+                            # Export
+                            if format == 'shapefile':
+                                subcatch_output_path = subcatch_dir / f"{name}_{clean_name}.shp"
+                                subcatch_gdf.to_file(subcatch_output_path)
+                            else:  # geojson
+                                subcatch_output_path = subcatch_dir / f"{name}_{clean_name}.geojson"
+                                subcatch_gdf.to_file(subcatch_output_path, driver='GeoJSON')
+                    
+                    logger.info(f"Exported subcatchment {subcatch_name} to {subcatch_output_path}")
+    
     
     def generate_report(self) -> pd.DataFrame:
         """
@@ -688,7 +939,7 @@ class ExzecoAnalysis:
         Returns
         -------
         pd.DataFrame
-            Summary statistics
+            Summary statistics for total domain and individual subcatchments
         """
         report_data = []
         
@@ -700,18 +951,50 @@ class ExzecoAnalysis:
             pixel_area_m2 = self.resolution_x * self.resolution_y
             pixel_area_km2 = pixel_area_m2 / 1e6
             
+            # Total domain statistics
+            total_valid_pixels = np.sum(~np.isnan(prob_map))
+            total_flood_pixels = np.sum(flood_mask & ~np.isnan(prob_map))
+            
             stats = {
                 'Analysis': name,
+                'Area_Type': 'Total Domain',
+                'Area_Name': 'Total Domain',
                 'Noise Level (m)': data['noise_level'],
-                'Total Area (km²)': np.sum(~np.isnan(self.dem_data)) * pixel_area_km2,
-                'Flood Area (km²)': np.sum(flood_mask) * pixel_area_km2,
-                'Flood Area (%)': 100 * np.sum(flood_mask) / np.sum(~np.isnan(self.dem_data)),
+                'Total Area (km²)': total_valid_pixels * pixel_area_km2,
+                'Flood Area (km²)': total_flood_pixels * pixel_area_km2,
+                'Flood Area (%)': 100 * total_flood_pixels / total_valid_pixels if total_valid_pixels > 0 else 0,
                 'Mean Probability': np.nanmean(prob_map),
                 'Max Probability': np.nanmax(prob_map),
-                'Pixels > 0.8 Prob': np.sum(prob_map > 0.8)
+                'Pixels > 0.8 Prob': np.sum((prob_map > 0.8) & ~np.isnan(prob_map))
             }
             
             report_data.append(stats)
+            
+            # If we have subcatchment results, add them
+            if 'subcatchments' in data:
+                for subcatch_name, subcatch_data in data['subcatchments'].items():
+                    subcatch_prob = subcatch_data['probability_map']
+                    subcatch_flood_mask = subcatch_prob > 0.5
+                    
+                    # Calculate statistics for this subcatchment
+                    subcatch_valid_pixels = np.sum(~np.isnan(subcatch_prob))
+                    subcatch_flood_pixels = np.sum(subcatch_flood_mask & ~np.isnan(subcatch_prob))
+                    
+                    if subcatch_valid_pixels > 0:
+                        subcatch_stats = {
+                            'Analysis': name,
+                            'Area_Type': 'Subcatchment',
+                            'Area_Name': subcatch_name,
+                            'Noise Level (m)': data['noise_level'],
+                            'Total Area (km²)': subcatch_valid_pixels * pixel_area_km2,
+                            'Flood Area (km²)': subcatch_flood_pixels * pixel_area_km2,
+                            'Flood Area (%)': 100 * subcatch_flood_pixels / subcatch_valid_pixels,
+                            'Mean Probability': np.nanmean(subcatch_prob),
+                            'Max Probability': np.nanmax(subcatch_prob),
+                            'Pixels > 0.8 Prob': np.sum((subcatch_prob > 0.8) & ~np.isnan(subcatch_prob))
+                        }
+                        
+                        report_data.append(subcatch_stats)
         
         return pd.DataFrame(report_data)
 
@@ -735,6 +1018,7 @@ def load_config(config_path: Union[str, Path]) -> ExzecoConfig:
     
     exzeco_params = config_dict.get('exzeco', {})
     processing_params = config_dict.get('processing', {})
+    study_area_params = config_dict.get('study_area', {})
     
     return ExzecoConfig(
         noise_levels=exzeco_params.get('noise_levels'),
@@ -743,19 +1027,72 @@ def load_config(config_path: Union[str, Path]) -> ExzecoConfig:
         drainage_classes=exzeco_params.get('drainage_classes'),
         n_jobs=processing_params.get('n_jobs', -1),
         chunk_size=processing_params.get('chunk_size', 1000),
-        seed=processing_params.get('seed', 42)
+        seed=processing_params.get('seed', 42),
+        shapefile_path=study_area_params.get('shapefile_path'),
+        bounds=study_area_params.get('bounds')
     )
 
 
-if __name__ == "__main__":
-    # Example usage
-    config = ExzecoConfig(iterations=50)  # Reduced for testing
+def run_exzeco_with_config(config_path: Union[str, Path], dem_path: Union[str, Path], output_dir: Union[str, Path]):
+    """
+    Run EXZECO analysis using configuration file.
+    
+    Parameters
+    ----------
+    config_path : str or Path
+        Path to configuration YAML file
+    dem_path : str or Path
+        Path to DEM file
+    output_dir : str or Path
+        Output directory for results
+        
+    Returns
+    -------
+    tuple
+        (ExzecoAnalysis instance, results dictionary, report DataFrame)
+    """
+    # Load configuration
+    config = load_config(config_path)
+    
+    # Initialize analyzer
     analyzer = ExzecoAnalysis(config)
     
-    # Run analysis (requires DEM file)
-    # results = analyzer.run_full_analysis("path/to/dem.tif")
-    # analyzer.export_results("output/")
-    # report = analyzer.generate_report()
-    # print(report)
+    # Run analysis - the method will automatically handle shapefile vs bounds
+    results = analyzer.run_full_analysis(
+        dem_path=dem_path,
+        bounds=config.bounds,
+        shapefile_path=config.shapefile_path
+    )
     
+    # Export results
+    analyzer.export_results(output_dir, format='geotiff')
+    analyzer.export_results(output_dir, format='geojson')
+    
+    # Generate report
+    report = analyzer.generate_report()
+    
+    # Save report
+    output_dir = Path(output_dir)
+    report.to_csv(output_dir / 'exzeco_report.csv', index=False)
+    report.to_excel(output_dir / 'exzeco_report.xlsx', index=False)
+    
+    logger.info(f"Analysis complete. Results saved to {output_dir}")
+    
+    return analyzer, results, report
+
+
+if __name__ == "__main__":
+    # Example usage with configuration file
+    config_path = "config/config.yml"
+    dem_path = "data/dem/cache/study_area_dem.tif"  
+    output_dir = "data/outputs"
+    
+    try:
+        analyzer, results, report = run_exzeco_with_config(config_path, dem_path, output_dir)
+        print("EXZECO analysis completed successfully!")
+        print(f"\nSummary Report:")
+        print(report)
+    except Exception as e:
+        print(f"Analysis failed: {e}")
+        
     print("EXZECO module loaded successfully")

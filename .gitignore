@@ -30,3 +30,5 @@ notebooks/*.html
 .Rhistory
 .RData
 .Rproj.user/
+
+/.quarto/

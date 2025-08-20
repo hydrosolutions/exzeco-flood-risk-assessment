@@ -5,6 +5,13 @@ exzeco:
   min_drainage_area: 0.001  # km² (reduced from 0.01 to capture more flow paths)
   drainage_classes: [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5]  # km²
 
+study_area:
+  # Option 1: Use shapefile (preferred if available)
+  shapefile_path: "./data/doi/qmp_doi.gpkg"  # Path to shapefile/geopackage
+  
+  # Option 2: Use bounding box (fallback)
+  bounds: [74.3, 42.3, 74.9, 43.2]  # [minx, miny, maxx, maxy]
+
 dem:
   resolution: 30  # meters (for SRTM/Copernicus DEM)
   source: "srtm" # "copernicus"
