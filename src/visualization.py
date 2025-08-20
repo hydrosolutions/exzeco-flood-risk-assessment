@@ -965,12 +965,13 @@ class DEMVisualizer:
             raise ValueError("DEM data not loaded")
         
         try:
-            # Try using earthpy if available
+            # Try using earthpy if available (but only for hillshade)
             import earthpy.spatial as es
             self.hillshade = es.hillshade(self.dem_data, azimuth=315, altitude=45)
-            self.slope = es.slope(self.dem_data)
-            self.aspect = es.aspect(self.dem_data)
-            print("✅ Terrain derivatives calculated using earthpy")
+            print("✅ Hillshade calculated using earthpy")
+            
+            # Use numpy gradient method for slope and aspect (earthpy doesn't have these)
+            self._calculate_slope_aspect_with_numpy()
             
         except ImportError:
             print("⚠️  earthpy not available, using numpy gradient method")
@@ -986,6 +987,17 @@ class DEMVisualizer:
             'slope': self.slope,
             'aspect': self.aspect
         }
+    
+    def _calculate_slope_aspect_with_numpy(self):
+        """Calculate slope and aspect using numpy gradients."""
+        # Calculate gradients
+        dy, dx = np.gradient(self.dem_data)
+        
+        # Calculate slope and aspect
+        self.slope = np.sqrt(dx*dx + dy*dy)
+        self.aspect = np.arctan2(-dx, dy)
+        
+        print("✅ Slope and aspect calculated using numpy gradients")
     
     def _calculate_simple_derivatives(self):
         """Calculate simple terrain derivatives using numpy gradients."""
@@ -1543,19 +1555,53 @@ class StudyAreaVisualizer:
                     print(f"   Polygon bounds: {polygon_to_plot.total_bounds}")
                     print(f"   Number of polygons: {len(polygon_to_plot)}")
                     
-                    # Add polygon to map
-                    folium.GeoJson(
-                        polygon_to_plot.to_json(),
-                        style_function=lambda x: {
-                            'fillColor': 'lightblue',
-                            'color': 'blue',
-                            'weight': 2,
-                            'fillOpacity': 0.3,
-                        },
-                        popup=folium.Popup('Domain of Interest', parse_html=True),
-                        tooltip='Domain of Interest Polygon'
-                    ).add_to(study_map)
-                    print("✅ Domain of interest polygon added to interactive map")
+                    # Check if NAME_EN field exists
+                    if 'NAME_EN' in polygon_to_plot.columns:
+                        print("   Found NAME_EN field in polygon data")
+                    else:
+                        print(f"   Available columns: {list(polygon_to_plot.columns)}")
+                    
+                    # Add polygon to map with NAME_EN in tooltip and popup
+                    if 'NAME_EN' in polygon_to_plot.columns:
+                        # Add with NAME_EN tooltip and popup
+                        folium.GeoJson(
+                            polygon_to_plot.to_json(),
+                            style_function=lambda x: {
+                                'fillColor': 'lightblue',
+                                'color': 'blue',
+                                'weight': 2,
+                                'fillOpacity': 0.3,
+                            },
+                            popup=folium.GeoJsonPopup(
+                                fields=['NAME_EN'],
+                                aliases=['Name:'],
+                                labels=True,
+                                sticky=True,
+                                max_width="300px"
+                            ),
+                            tooltip=folium.GeoJsonTooltip(
+                                fields=['NAME_EN'],
+                                aliases=['Name: '],
+                                labels=True,
+                                sticky=False,
+                                opacity=0.9,
+                                direction='right'
+                            )
+                        ).add_to(study_map)
+                    else:
+                        # Fallback without NAME_EN
+                        folium.GeoJson(
+                            polygon_to_plot.to_json(),
+                            style_function=lambda x: {
+                                'fillColor': 'lightblue',
+                                'color': 'blue',
+                                'weight': 2,
+                                'fillOpacity': 0.3,
+                            },
+                            popup=folium.Popup('Domain of Interest', parse_html=True),
+                            tooltip=folium.Tooltip('Domain of Interest Polygon')
+                        ).add_to(study_map)
+                    print("✅ Domain of interest polygon added to interactive map with NAME_EN tooltip")
                 except Exception as e:
                     print(f"⚠️  Could not add polygon to interactive map: {e}")
                     import traceback

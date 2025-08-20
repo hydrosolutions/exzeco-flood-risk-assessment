@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.8.20">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>shapefile_analysis_readme</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="SHAPEFILE_ANALYSIS_README_files/libs/clipboard/clipboard.min.js"></script>
+<script src="SHAPEFILE_ANALYSIS_README_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="SHAPEFILE_ANALYSIS_README_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="SHAPEFILE_ANALYSIS_README_files/libs/quarto-html/axe/axe-check.js" type="module"></script>
+<script src="SHAPEFILE_ANALYSIS_README_files/libs/quarto-html/popper.min.js"></script>
+<script src="SHAPEFILE_ANALYSIS_README_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="SHAPEFILE_ANALYSIS_README_files/libs/quarto-html/anchor.min.js"></script>
+<link href="SHAPEFILE_ANALYSIS_README_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="SHAPEFILE_ANALYSIS_README_files/libs/quarto-html/quarto-syntax-highlighting-bd0f20613ab34a035844aaae9062fb4e.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="SHAPEFILE_ANALYSIS_README_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="SHAPEFILE_ANALYSIS_README_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="SHAPEFILE_ANALYSIS_README_files/libs/bootstrap/bootstrap-4bd8872b5b3948b7e359c6be4146e7cb.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+
+
+</head>
+
+<body class="quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#shapefile-based-exzeco-analysis" id="toc-shapefile-based-exzeco-analysis" class="nav-link active" data-scroll-target="#shapefile-based-exzeco-analysis"><span class="header-section-number">1</span> Shapefile-based EXZECO Analysis</a>
+  <ul class="collapse">
+  <li><a href="#overview" id="toc-overview" class="nav-link" data-scroll-target="#overview"><span class="header-section-number">1.1</span> Overview</a></li>
+  <li><a href="#key-features" id="toc-key-features" class="nav-link" data-scroll-target="#key-features"><span class="header-section-number">1.2</span> Key Features</a>
+  <ul class="collapse">
+  <li><a href="#multi-scale-analysis" id="toc-multi-scale-analysis" class="nav-link" data-scroll-target="#multi-scale-analysis"><span class="header-section-number">1.2.1</span> 1. Multi-Scale Analysis</a></li>
+  <li><a href="#flexible-input-options" id="toc-flexible-input-options" class="nav-link" data-scroll-target="#flexible-input-options"><span class="header-section-number">1.2.2</span> 2. Flexible Input Options</a></li>
+  <li><a href="#enhanced-output" id="toc-enhanced-output" class="nav-link" data-scroll-target="#enhanced-output"><span class="header-section-number">1.2.3</span> 3. Enhanced Output</a></li>
+  </ul></li>
+  <li><a href="#configuration" id="toc-configuration" class="nav-link" data-scroll-target="#configuration"><span class="header-section-number">1.3</span> Configuration</a></li>
+  <li><a href="#usage-examples" id="toc-usage-examples" class="nav-link" data-scroll-target="#usage-examples"><span class="header-section-number">1.4</span> Usage Examples</a>
+  <ul class="collapse">
+  <li><a href="#simple-configuration-based-analysis" id="toc-simple-configuration-based-analysis" class="nav-link" data-scroll-target="#simple-configuration-based-analysis"><span class="header-section-number">1.4.1</span> 1. Simple Configuration-Based Analysis</a></li>
+  <li><a href="#direct-class-usage" id="toc-direct-class-usage" class="nav-link" data-scroll-target="#direct-class-usage"><span class="header-section-number">1.4.2</span> 2. Direct Class Usage</a></li>
+  <li><a href="#custom-shapefile-analysis" id="toc-custom-shapefile-analysis" class="nav-link" data-scroll-target="#custom-shapefile-analysis"><span class="header-section-number">1.4.3</span> 3. Custom Shapefile Analysis</a></li>
+  </ul></li>
+  <li><a href="#output-structure" id="toc-output-structure" class="nav-link" data-scroll-target="#output-structure"><span class="header-section-number">1.5</span> Output Structure</a></li>
+  <li><a href="#report-structure" id="toc-report-structure" class="nav-link" data-scroll-target="#report-structure"><span class="header-section-number">1.6</span> Report Structure</a></li>
+  <li><a href="#shapefile-requirements" id="toc-shapefile-requirements" class="nav-link" data-scroll-target="#shapefile-requirements"><span class="header-section-number">1.7</span> Shapefile Requirements</a>
+  <ul class="collapse">
+  <li><a href="#supported-formats" id="toc-supported-formats" class="nav-link" data-scroll-target="#supported-formats"><span class="header-section-number">1.7.1</span> Supported Formats</a></li>
+  <li><a href="#attribute-requirements" id="toc-attribute-requirements" class="nav-link" data-scroll-target="#attribute-requirements"><span class="header-section-number">1.7.2</span> Attribute Requirements</a></li>
+  <li><a href="#geometry-requirements" id="toc-geometry-requirements" class="nav-link" data-scroll-target="#geometry-requirements"><span class="header-section-number">1.7.3</span> Geometry Requirements</a></li>
+  </ul></li>
+  <li><a href="#error-handling" id="toc-error-handling" class="nav-link" data-scroll-target="#error-handling"><span class="header-section-number">1.8</span> Error Handling</a></li>
+  <li><a href="#testing" id="toc-testing" class="nav-link" data-scroll-target="#testing"><span class="header-section-number">1.9</span> Testing</a></li>
+  <li><a href="#implementation-notes" id="toc-implementation-notes" class="nav-link" data-scroll-target="#implementation-notes"><span class="header-section-number">1.10</span> Implementation Notes</a>
+  <ul class="collapse">
+  <li><a href="#key-changes-made" id="toc-key-changes-made" class="nav-link" data-scroll-target="#key-changes-made"><span class="header-section-number">1.10.1</span> Key Changes Made</a></li>
+  <li><a href="#performance-considerations" id="toc-performance-considerations" class="nav-link" data-scroll-target="#performance-considerations"><span class="header-section-number">1.10.2</span> Performance Considerations</a></li>
+  </ul></li>
+  <li><a href="#troubleshooting" id="toc-troubleshooting" class="nav-link" data-scroll-target="#troubleshooting"><span class="header-section-number">1.11</span> Troubleshooting</a>
+  <ul class="collapse">
+  <li><a href="#common-issues" id="toc-common-issues" class="nav-link" data-scroll-target="#common-issues"><span class="header-section-number">1.11.1</span> Common Issues</a></li>
+  <li><a href="#debug-information" id="toc-debug-information" class="nav-link" data-scroll-target="#debug-information"><span class="header-section-number">1.11.2</span> Debug Information</a></li>
+  </ul></li>
+  <li><a href="#future-enhancements" id="toc-future-enhancements" class="nav-link" data-scroll-target="#future-enhancements"><span class="header-section-number">1.12</span> Future Enhancements</a></li>
+  </ul></li>
+  </ul>
+</nav>
+</div>
+<main class="content" id="quarto-document-content">
+
+
+
+
+<section id="shapefile-based-exzeco-analysis" class="level1" data-number="1">
+<h1 data-number="1"><span class="header-section-number">1</span> Shapefile-based EXZECO Analysis</h1>
+<p>This document describes the new shapefile-based analysis functionality added to the EXZECO project.</p>
+<section id="overview" class="level2" data-number="1.1">
+<h2 data-number="1.1" class="anchored" data-anchor-id="overview"><span class="header-section-number">1.1</span> Overview</h2>
+<p>The EXZECO analysis now supports user-defined shapefiles for study area definition. This allows analysis of: - <strong>Multiple subcatchments</strong> within a single analysis run - <strong>Individual basin statistics</strong> alongside total domain statistics - <strong>Automatic fallback</strong> to bounding box if shapefile is not available - <strong>Flexible geometry support</strong> for any number of features</p>
+</section>
+<section id="key-features" class="level2" data-number="1.2">
+<h2 data-number="1.2" class="anchored" data-anchor-id="key-features"><span class="header-section-number">1.2</span> Key Features</h2>
+<section id="multi-scale-analysis" class="level3" data-number="1.2.1">
+<h3 data-number="1.2.1" class="anchored" data-anchor-id="multi-scale-analysis"><span class="header-section-number">1.2.1</span> 1. Multi-Scale Analysis</h3>
+<ul>
+<li><strong>Total Domain</strong>: Statistics for the entire study area (union of all subcatchments)</li>
+<li><strong>Individual Subcatchments</strong>: Separate statistics for each feature in the shapefile</li>
+<li><strong>Comparative Analysis</strong>: Easy comparison between different basins/catchments</li>
+</ul>
+</section>
+<section id="flexible-input-options" class="level3" data-number="1.2.2">
+<h3 data-number="1.2.2" class="anchored" data-anchor-id="flexible-input-options"><span class="header-section-number">1.2.2</span> 2. Flexible Input Options</h3>
+<ul>
+<li><strong>Primary</strong>: Shapefile/GeoPackage with multiple features</li>
+<li><strong>Fallback</strong>: Bounding box coordinates</li>
+<li><strong>Error Handling</strong>: Clear error messages if neither option is available</li>
+</ul>
+</section>
+<section id="enhanced-output" class="level3" data-number="1.2.3">
+<h3 data-number="1.2.3" class="anchored" data-anchor-id="enhanced-output"><span class="header-section-number">1.2.3</span> 3. Enhanced Output</h3>
+<ul>
+<li><strong>Comprehensive Reports</strong>: Statistics for all areas and subcatchments</li>
+<li><strong>Separate Exports</strong>: Individual raster and vector files for each subcatchment</li>
+<li><strong>Organized Structure</strong>: Results organized in subdirectories for clarity</li>
+</ul>
+</section>
+</section>
+<section id="configuration" class="level2" data-number="1.3">
+<h2 data-number="1.3" class="anchored" data-anchor-id="configuration"><span class="header-section-number">1.3</span> Configuration</h2>
+<p>Update your <code>config/config.yml</code> to include study area parameters:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode yaml code-with-copy"><code class="sourceCode yaml"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># EXZECO Configuration</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">exzeco</span><span class="kw">:</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">noise_levels</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="fl">0.2</span><span class="kw">,</span><span class="at"> </span><span class="fl">0.4</span><span class="kw">,</span><span class="at"> </span><span class="fl">0.6</span><span class="kw">,</span><span class="at"> </span><span class="fl">0.8</span><span class="kw">,</span><span class="at"> </span><span class="fl">1.0</span><span class="kw">]</span><span class="co">  # meters</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">iterations</span><span class="kw">:</span><span class="at"> </span><span class="dv">100</span><span class="co">  # Monte Carlo iterations</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">min_drainage_area</span><span class="kw">:</span><span class="at"> </span><span class="fl">0.001</span><span class="co">  # km²</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">drainage_classes</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="fl">0.001</span><span class="kw">,</span><span class="at"> </span><span class="fl">0.005</span><span class="kw">,</span><span class="at"> </span><span class="fl">0.01</span><span class="kw">,</span><span class="at"> </span><span class="fl">0.05</span><span class="kw">,</span><span class="at"> </span><span class="fl">0.1</span><span class="kw">,</span><span class="at"> </span><span class="fl">0.5</span><span class="kw">,</span><span class="at"> </span><span class="dv">1</span><span class="kw">,</span><span class="at"> </span><span class="dv">5</span><span class="kw">]</span><span class="co">  # km²</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="fu">study_area</span><span class="kw">:</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co">  # Option 1: Use shapefile (preferred if available)</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">shapefile_path</span><span class="kw">:</span><span class="at"> </span><span class="st">"./data/doi/qmp_doi.gpkg"</span><span class="co">  # Path to shapefile/geopackage</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="at">  </span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="co">  # Option 2: Use bounding box (fallback)</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">bounds</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="fl">74.3</span><span class="kw">,</span><span class="at"> </span><span class="fl">42.3</span><span class="kw">,</span><span class="at"> </span><span class="fl">74.9</span><span class="kw">,</span><span class="at"> </span><span class="fl">43.2</span><span class="kw">]</span><span class="co">  # [minx, miny, maxx, maxy]</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="fu">dem</span><span class="kw">:</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">resolution</span><span class="kw">:</span><span class="at"> </span><span class="dv">30</span><span class="co">  # meters</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">source</span><span class="kw">:</span><span class="at"> </span><span class="st">"srtm"</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">cache_dir</span><span class="kw">:</span><span class="at"> </span><span class="st">"./data/dem"</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a><span class="fu">processing</span><span class="kw">:</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">n_jobs</span><span class="kw">:</span><span class="at"> </span><span class="dv">-1</span><span class="co">  # Use all available cores</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">chunk_size</span><span class="kw">:</span><span class="at"> </span><span class="dv">1000</span><span class="co">  # pixels per chunk</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">use_gpu</span><span class="kw">:</span><span class="at"> </span><span class="ch">false</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a><span class="fu">visualization</span><span class="kw">:</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">cmap</span><span class="kw">:</span><span class="at"> </span><span class="st">"Blues"</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">interactive</span><span class="kw">:</span><span class="at"> </span><span class="ch">true</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">export_format</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="st">"html"</span><span class="kw">,</span><span class="at"> </span><span class="st">"png"</span><span class="kw">,</span><span class="at"> </span><span class="st">"geojson"</span><span class="kw">]</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+<section id="usage-examples" class="level2" data-number="1.4">
+<h2 data-number="1.4" class="anchored" data-anchor-id="usage-examples"><span class="header-section-number">1.4</span> Usage Examples</h2>
+<section id="simple-configuration-based-analysis" class="level3" data-number="1.4.1">
+<h3 data-number="1.4.1" class="anchored" data-anchor-id="simple-configuration-based-analysis"><span class="header-section-number">1.4.1</span> 1. Simple Configuration-Based Analysis</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> src.exzeco <span class="im">import</span> run_exzeco_with_config</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Run analysis using configuration file</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>analyzer, results, report <span class="op">=</span> run_exzeco_with_config(</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    config_path<span class="op">=</span><span class="st">'config/config.yml'</span>,</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    dem_path<span class="op">=</span><span class="st">'data/dem/cache/study_area_dem.tif'</span>,</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    output_dir<span class="op">=</span><span class="st">'data/outputs'</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Print comprehensive report</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(report)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+<section id="direct-class-usage" class="level3" data-number="1.4.2">
+<h3 data-number="1.4.2" class="anchored" data-anchor-id="direct-class-usage"><span class="header-section-number">1.4.2</span> 2. Direct Class Usage</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> src.exzeco <span class="im">import</span> ExzecoAnalysis, load_config</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Load configuration</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>config <span class="op">=</span> load_config(<span class="st">'config/config.yml'</span>)</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Initialize analyzer</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>analyzer <span class="op">=</span> ExzecoAnalysis(config)</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Run full analysis with automatic shapefile/bounds handling</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> analyzer.run_full_analysis(</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    dem_path<span class="op">=</span><span class="st">'data/dem/cache/study_area_dem.tif'</span>,</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    bounds<span class="op">=</span>config.bounds,</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    shapefile_path<span class="op">=</span>config.shapefile_path</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a><span class="co"># Export results</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>analyzer.export_results(<span class="st">'data/outputs'</span>, <span class="bu">format</span><span class="op">=</span><span class="st">'geotiff'</span>)</span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>analyzer.export_results(<span class="st">'data/outputs'</span>, <span class="bu">format</span><span class="op">=</span><span class="st">'geojson'</span>)</span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a><span class="co"># Generate and save report</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>report <span class="op">=</span> analyzer.generate_report()</span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>report.to_csv(<span class="st">'data/outputs/exzeco_report.csv'</span>, index<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>report.to_excel(<span class="st">'data/outputs/exzeco_report.xlsx'</span>, index<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+<section id="custom-shapefile-analysis" class="level3" data-number="1.4.3">
+<h3 data-number="1.4.3" class="anchored" data-anchor-id="custom-shapefile-analysis"><span class="header-section-number">1.4.3</span> 3. Custom Shapefile Analysis</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> src.exzeco <span class="im">import</span> ExzecoAnalysis, ExzecoConfig</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Create custom configuration</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>config <span class="op">=</span> ExzecoConfig(</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    noise_levels<span class="op">=</span>[<span class="fl">0.2</span>, <span class="fl">0.4</span>, <span class="fl">0.6</span>, <span class="fl">0.8</span>, <span class="fl">1.0</span>],</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    iterations<span class="op">=</span><span class="dv">100</span>,</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    shapefile_path<span class="op">=</span><span class="st">'path/to/your/shapefile.shp'</span>,</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    bounds<span class="op">=</span>[xmin, ymin, xmax, ymax]  <span class="co"># fallback bounds</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Run analysis</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>analyzer <span class="op">=</span> ExzecoAnalysis(config)</span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> analyzer.run_full_analysis(</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>    dem_path<span class="op">=</span><span class="st">'path/to/your/dem.tif'</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a><span class="co"># Process results</span></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>report <span class="op">=</span> analyzer.generate_report()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+</section>
+<section id="output-structure" class="level2" data-number="1.5">
+<h2 data-number="1.5" class="anchored" data-anchor-id="output-structure"><span class="header-section-number">1.5</span> Output Structure</h2>
+<p>The analysis generates comprehensive outputs:</p>
+<pre><code>data/outputs/
+├── exzeco_20cm.tif                    # Total domain raster (20cm noise)
+├── exzeco_40cm.tif                    # Total domain raster (40cm noise)
+├── ...                                # Other noise levels
+├── exzeco_20cm.geojson               # Total domain vectors (20cm noise)
+├── ...                                # Other noise levels
+├── subcatchments/                     # Individual subcatchment results
+│   ├── exzeco_20cm_Ala_Archa.tif     # Ala Archa basin (20cm noise)
+│   ├── exzeco_20cm_Alamedin.tif      # Alamedin basin (20cm noise)
+│   ├── exzeco_40cm_Ala_Archa.tif     # Ala Archa basin (40cm noise)
+│   └── ...                           # Other combinations
+├── exzeco_report.csv                 # Comprehensive statistics
+└── exzeco_report.xlsx                # Excel version of report</code></pre>
+</section>
+<section id="report-structure" class="level2" data-number="1.6">
+<h2 data-number="1.6" class="anchored" data-anchor-id="report-structure"><span class="header-section-number">1.6</span> Report Structure</h2>
+<p>The generated report includes detailed statistics:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Column</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Analysis</td>
+<td>Analysis identifier (e.g., “exzeco_20cm”)</td>
+</tr>
+<tr class="even">
+<td>Area_Type</td>
+<td>“Total Domain” or “Subcatchment”</td>
+</tr>
+<tr class="odd">
+<td>Area_Name</td>
+<td>Name of the area (from shapefile attributes)</td>
+</tr>
+<tr class="even">
+<td>Noise Level (m)</td>
+<td>Noise level used in analysis</td>
+</tr>
+<tr class="odd">
+<td>Total Area (km²)</td>
+<td>Total area of the region</td>
+</tr>
+<tr class="even">
+<td>Flood Area (km²)</td>
+<td>Area identified as flood-prone</td>
+</tr>
+<tr class="odd">
+<td>Flood Area (%)</td>
+<td>Percentage of area that is flood-prone</td>
+</tr>
+<tr class="even">
+<td>Mean Probability</td>
+<td>Average flood probability</td>
+</tr>
+<tr class="odd">
+<td>Max Probability</td>
+<td>Maximum flood probability</td>
+</tr>
+<tr class="even">
+<td>Pixels &gt; 0.8 Prob</td>
+<td>Number of high-confidence flood pixels</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="shapefile-requirements" class="level2" data-number="1.7">
+<h2 data-number="1.7" class="anchored" data-anchor-id="shapefile-requirements"><span class="header-section-number">1.7</span> Shapefile Requirements</h2>
+<section id="supported-formats" class="level3" data-number="1.7.1">
+<h3 data-number="1.7.1" class="anchored" data-anchor-id="supported-formats"><span class="header-section-number">1.7.1</span> Supported Formats</h3>
+<ul>
+<li><strong>Shapefile</strong> (.shp)</li>
+<li><strong>GeoPackage</strong> (.gpkg)</li>
+<li><strong>GeoJSON</strong> (.geojson)</li>
+<li>Any format supported by GeoPandas</li>
+</ul>
+</section>
+<section id="attribute-requirements" class="level3" data-number="1.7.2">
+<h3 data-number="1.7.2" class="anchored" data-anchor-id="attribute-requirements"><span class="header-section-number">1.7.2</span> Attribute Requirements</h3>
+<p>The shapefile should have meaningful names in one of these columns: - <code>NAME_EN</code> (English name) - <code>name</code> (generic name) - Or the system will use <code>feature_N</code> as fallback</p>
+</section>
+<section id="geometry-requirements" class="level3" data-number="1.7.3">
+<h3 data-number="1.7.3" class="anchored" data-anchor-id="geometry-requirements"><span class="header-section-number">1.7.3</span> Geometry Requirements</h3>
+<ul>
+<li><strong>Valid geometries</strong> only (system filters invalid ones)</li>
+<li><strong>Polygon or MultiPolygon</strong> features</li>
+<li><strong>Any CRS</strong> (system handles coordinate transformations)</li>
+</ul>
+</section>
+</section>
+<section id="error-handling" class="level2" data-number="1.8">
+<h2 data-number="1.8" class="anchored" data-anchor-id="error-handling"><span class="header-section-number">1.8</span> Error Handling</h2>
+<p>The system provides clear error messages for common issues:</p>
+<ol type="1">
+<li><strong>Missing shapefile</strong>: Falls back to bounding box</li>
+<li><strong>Invalid shapefile</strong>: Falls back to bounding box</li>
+<li><strong>No bounds provided</strong>: Raises descriptive error</li>
+<li><strong>Empty geometries</strong>: Filters and continues with valid ones</li>
+<li><strong>CRS mismatches</strong>: Automatic coordinate transformation</li>
+</ol>
+</section>
+<section id="testing" class="level2" data-number="1.9">
+<h2 data-number="1.9" class="anchored" data-anchor-id="testing"><span class="header-section-number">1.9</span> Testing</h2>
+<p>Run the test suite to verify functionality:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Test all functionality</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> test_shapefile_analysis.py</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Run demonstration</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> demo_shapefile_analysis.py</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+<section id="implementation-notes" class="level2" data-number="1.10">
+<h2 data-number="1.10" class="anchored" data-anchor-id="implementation-notes"><span class="header-section-number">1.10</span> Implementation Notes</h2>
+<section id="key-changes-made" class="level3" data-number="1.10.1">
+<h3 data-number="1.10.1" class="anchored" data-anchor-id="key-changes-made"><span class="header-section-number">1.10.1</span> Key Changes Made</h3>
+<ol type="1">
+<li><strong>Configuration Updates</strong>:
+<ul>
+<li>Added <code>study_area</code> section to config.yml</li>
+<li>New <code>ExzecoConfig</code> parameters for shapefile and bounds</li>
+</ul></li>
+<li><strong>Core Analysis Updates</strong>:
+<ul>
+<li><code>load_study_areas()</code> method for flexible area loading</li>
+<li><code>mask_raster_by_geometry()</code> for subcatchment masking</li>
+<li>Enhanced <code>run_full_analysis()</code> with subcatchment support</li>
+<li>Updated reporting and export functions</li>
+</ul></li>
+<li><strong>Workflow Enhancements</strong>:
+<ul>
+<li>Automatic fallback from shapefile to bounds</li>
+<li>Individual subcatchment result processing</li>
+<li>Organized output directory structure</li>
+</ul></li>
+</ol>
+</section>
+<section id="performance-considerations" class="level3" data-number="1.10.2">
+<h3 data-number="1.10.2" class="anchored" data-anchor-id="performance-considerations"><span class="header-section-number">1.10.2</span> Performance Considerations</h3>
+<ul>
+<li><strong>Parallel Processing</strong>: Monte Carlo iterations run in parallel</li>
+<li><strong>Memory Efficient</strong>: Subcatchment masking done on-demand</li>
+<li><strong>Optimized I/O</strong>: Compressed output formats</li>
+<li><strong>Progress Tracking</strong>: Progress bars for long-running operations</li>
+</ul>
+</section>
+</section>
+<section id="troubleshooting" class="level2" data-number="1.11">
+<h2 data-number="1.11" class="anchored" data-anchor-id="troubleshooting"><span class="header-section-number">1.11</span> Troubleshooting</h2>
+<section id="common-issues" class="level3" data-number="1.11.1">
+<h3 data-number="1.11.1" class="anchored" data-anchor-id="common-issues"><span class="header-section-number">1.11.1</span> Common Issues</h3>
+<ol type="1">
+<li><strong>Empty DEM Results</strong>:
+<ul>
+<li>Check coordinate system compatibility between DEM and shapefile</li>
+<li>Verify bounds overlap with DEM extent</li>
+<li>Ensure DEM covers the study area</li>
+</ul></li>
+<li><strong>Slow Performance</strong>:
+<ul>
+<li>Reduce number of iterations for testing</li>
+<li>Use fewer noise levels during development</li>
+<li>Consider reducing DEM resolution</li>
+</ul></li>
+<li><strong>Memory Issues</strong>:
+<ul>
+<li>Reduce chunk_size in configuration</li>
+<li>Lower number of parallel jobs (n_jobs)</li>
+<li>Process smaller study areas</li>
+</ul></li>
+</ol>
+</section>
+<section id="debug-information" class="level3" data-number="1.11.2">
+<h3 data-number="1.11.2" class="anchored" data-anchor-id="debug-information"><span class="header-section-number">1.11.2</span> Debug Information</h3>
+<p>The system provides detailed logging. Enable debug mode:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> logging</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>logging.basicConfig(level<span class="op">=</span>logging.DEBUG)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+</section>
+<section id="future-enhancements" class="level2" data-number="1.12">
+<h2 data-number="1.12" class="anchored" data-anchor-id="future-enhancements"><span class="header-section-number">1.12</span> Future Enhancements</h2>
+<p>Potential improvements for future versions:</p>
+<ol type="1">
+<li><strong>Interactive Selection</strong>: GUI for shapefile attribute selection</li>
+<li><strong>Advanced Filtering</strong>: Filter subcatchments by area/properties</li>
+<li><strong>Nested Hierarchies</strong>: Support for nested basin structures</li>
+<li><strong>Performance Optimization</strong>: GPU acceleration for large areas</li>
+<li><strong>Visualization</strong>: Interactive maps showing subcatchment results</li>
+</ol>
+<hr>
+<p>For questions or issues, please refer to the main project documentation or contact the development team.</p>
+</section>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+        const codeEl = trigger.previousElementSibling.cloneNode(true);
+        for (const childEl of codeEl.children) {
+          if (isCodeAnnotation(childEl)) {
+            childEl.remove();
+          }
+        }
+        return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>
