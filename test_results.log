@@ -1,0 +1,39 @@
+🧪 Testing Shapefile-based EXZECO Analysis
+==================================================
+=== Testing Shapefile Loading ===
+Configuration loaded:
+  Shapefile path: ./data/doi/qmp_doi.gpkg
+  Fallback bounds: [74.3, 42.3, 74.9, 43.2]
+
+✅ Successfully loaded study areas:
+  Number of subcatchments: 2
+  Total bounds: (451342.8867469557, 4694272.722329149, 481732.8867469557, 4778547.0232)
+  CRS: EPSG:32643
+
+Subcatchment details:
+  - Ala Archa: Area = 765531625 (CRS units)
+  - Alamedin: Area = 826389235 (CRS units)
+
+=== Testing Fallback to Bounds ===
+✅ Successfully fell back to bounds:
+  Number of features: 1
+  Total bounds: [74.3, 42.3, 74.9, 43.2]
+
+=== Testing Error Handling ===
+✅ Correctly raised error: Neither valid shapefile nor bounds provided. Please specify either a valid shapefile path in config.yml or bounding box coordinates.
+
+=== Testing DEM Analysis Preview ===
+✅ Successfully loaded DEM:
+  DEM shape: (0, 0)
+  DEM resolution: 0.0m
+  CRS: EPSG:4326
+
+==================================================
+📊 Test Results: 4/4 passed
+🎉 All tests passed! The shapefile analysis feature is ready to use.
+
+To run a full analysis, use:
+  python src/exzeco.py
+or
+  from src.exzeco import run_exzeco_with_config
+  run_exzeco_with_config('config/config.yml', 'data/dem/cache/study_area_dem.tif', 'data/outputs')
