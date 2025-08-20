@@ -1,0 +1,23 @@
+project:
+  type: default
+  title: "EXZECO Project"
+  # Make the repo the preview root so assets outside notebooks/ are served
+  preview:
+    navigate: true
+
+# Ensure external assets (maps, images, html) are available when previewing/publishing
+resources:
+  - data/outputs/**
+  - README_files/**
+  - notebooks/report_files/**
+
+# Optional defaults; report.qmd also sets its own
+format:
+  html:
+    toc: true
+    number-sections: true
+    theme: cosmo
+
+# Convenience: what to render by default
+render:
+  - notebooks/report.qmd
