@@ -66,7 +66,8 @@ logger = logging.getLogger(__name__)
 def create_study_area_visualization(study_area, area_km2: float, 
                                    output_dir: Optional[Path] = None,
                                    show_static: bool = True, 
-                                   show_interactive: bool = True) -> Dict:
+                                   show_interactive: bool = True,
+                                   polygon_gdf=None) -> Dict:
     """
     Convenience function to create study area visualization.
     
@@ -82,13 +83,15 @@ def create_study_area_visualization(study_area, area_km2: float,
         Whether to show static matplotlib plot
     show_interactive : bool
         Whether to create interactive map
+    polygon_gdf : GeoDataFrame, optional
+        Domain of interest polygon to add to visualizations
         
     Returns
     -------
     dict
         Dictionary containing created visualizations
     """
-    visualizer = StudyAreaVisualizer(study_area, area_km2)
+    visualizer = StudyAreaVisualizer(study_area, area_km2, polygon_gdf=polygon_gdf)
     return visualizer.create_complete_visualization(
         output_dir=output_dir,
         show_static=show_static,
@@ -178,10 +181,7 @@ class ExzecoVisualizer:
             tiles=None
         )
         
-        # Add base layers
-        folium.TileLayer('OpenStreetMap', name='OpenStreetMap').add_to(m)
-        
-        # Add Stamen Terrain with proper attribution
+        # Add base layers - Terrain first to make it default
         folium.TileLayer(
             tiles='https://stamen-tiles-{s}.a.ssl.fastly.net/terrain/{z}/{x}/{y}{r}.png',
             attr='Map tiles by <a href="http://stamen.com">Stamen Design</a>, under <a href="http://creativecommons.org/licenses/by/3.0">CC BY 3.0</a>. Data by <a href="http://openstreetmap.org">OpenStreetMap</a>, under <a href="http://www.openstreetmap.org/copyright">ODbL</a>.',
@@ -189,6 +189,8 @@ class ExzecoVisualizer:
             overlay=False,
             control=True
         ).add_to(m)
+        
+        folium.TileLayer('OpenStreetMap', name='OpenStreetMap').add_to(m)
         
         # Add CartoDB Dark Matter with proper attribution
         folium.TileLayer(
@@ -1260,7 +1262,7 @@ class StudyAreaVisualizer:
     Specialized visualizer for study area display and analysis.
     """
     
-    def __init__(self, study_area, area_km2: float):
+    def __init__(self, study_area, area_km2: float, polygon_gdf=None):
         """
         Initialize study area visualizer.
         
@@ -1270,10 +1272,13 @@ class StudyAreaVisualizer:
             Study area object
         area_km2 : float
             Area in square kilometers
+        polygon_gdf : GeoDataFrame, optional
+            Domain of interest polygon to add to visualizations
         """
         self.study_area = study_area
         self.area_km2 = area_km2
         self.study_bounds = study_area.bounds
+        self.polygon_gdf = polygon_gdf
     
     def create_static_visualization(self, figsize: Tuple[int, int] = (12, 10)) -> plt.Figure:
         """
@@ -1294,15 +1299,29 @@ class StudyAreaVisualizer:
         import matplotlib.ticker as ticker
         
         print(f"Study Area Configuration:")
-        print(f"  Bounds: {self.study_bounds}")
+        print(f"  Bounds: ({self.study_bounds[0]:.2f}, {self.study_bounds[1]:.2f}, {self.study_bounds[2]:.2f}, {self.study_bounds[3]:.2f})")
         print(f"  Area: {self.area_km2:.2f} km²")
-        print(f"  Center: ({np.mean(self.study_bounds[::2]):.4f}, {np.mean(self.study_bounds[1::2]):.4f})")
+        print(f"  Center: ({np.mean(self.study_bounds[::2]):.2f}, {np.mean(self.study_bounds[1::2]):.2f})")
         
         # Create study area geodataframe
         study_gdf = self.study_area.to_geopandas()
         
         # Convert to Web Mercator for contextily
         study_gdf_web = study_gdf.to_crs(epsg=3857)
+        
+        # Also convert polygon if provided
+        polygon_gdf_web = None
+        if self.polygon_gdf is not None:
+            try:
+                print(f"Converting polygon from CRS: {self.polygon_gdf.crs}")
+                # Ensure polygon is in EPSG:4326 first
+                polygon_to_convert = self.polygon_gdf.to_crs('EPSG:4326') if self.polygon_gdf.crs != 'EPSG:4326' else self.polygon_gdf
+                polygon_gdf_web = polygon_to_convert.to_crs(epsg=3857)
+                print(f"✅ Polygon converted to Web Mercator for static visualization")
+                print(f"   Polygon bounds: {polygon_gdf_web.total_bounds}")
+            except Exception as e:
+                print(f"⚠️  Could not convert polygon: {e}")
+                polygon_gdf_web = None
         
         # Create the plot with background map
         fig, ax = plt.subplots(1, 1, figsize=figsize)
@@ -1311,12 +1330,27 @@ class StudyAreaVisualizer:
             # Use very transparent fill for the study area
             study_gdf_web.plot(ax=ax, alpha=0.15, edgecolor='red', facecolor='yellow', linewidth=3)
             
+            # Add domain of interest polygon if provided
+            if polygon_gdf_web is not None:
+                print("Plotting domain of interest polygon on static map...")
+                polygon_gdf_web.plot(ax=ax, alpha=0.3, edgecolor='blue', facecolor='lightblue', linewidth=2, label='Domain of Interest')
+                print("✅ Domain of interest polygon plotted on static map")
+            
             # Add topographic background map
             ctx.add_basemap(ax, crs=study_gdf_web.crs.to_string(), 
                             source=ctx.providers.Esri.WorldTopoMap,
                             attribution='© Esri, USGS, NOAA')
             
             ax.set_title('Study Area - Topographic Context', fontsize=14, fontweight='bold')
+            
+            # Add legend if polygon was plotted
+            if polygon_gdf_web is not None:
+                from matplotlib.patches import Patch
+                legend_elements = [
+                    Patch(facecolor='yellow', alpha=0.15, edgecolor='red', label='Study Area Bounds'),
+                    Patch(facecolor='lightblue', alpha=0.3, edgecolor='blue', label='Domain of Interest')
+                ]
+                ax.legend(handles=legend_elements, loc='upper right')
             
             # Convert Web Mercator bounds back to lat/lon for axis labels
             transformer = Transformer.from_crs("EPSG:3857", "EPSG:4326", always_xy=True)
@@ -1340,7 +1374,7 @@ class StudyAreaVisualizer:
             ax.set_ylabel('Latitude', fontsize=12)
             
             # Add area information in a nice box
-            info_text = f'Area: {self.area_km2:.2f} km²\nBounds: {self.study_bounds}\nCenter: ({np.mean(self.study_bounds[::2]):.4f}°E, {np.mean(self.study_bounds[1::2]):.4f}°N)'
+            info_text = f'Area: {self.area_km2:.2f} km²\nBounds: ({self.study_bounds[0]:.2f}, {self.study_bounds[1]:.2f}, {self.study_bounds[2]:.2f}, {self.study_bounds[3]:.2f})\nCenter: ({np.mean(self.study_bounds[::2]):.2f}°E, {np.mean(self.study_bounds[1::2]):.2f}°N)'
             ax.text(0.02, 0.98, info_text, 
                      transform=ax.transAxes, ha='left', va='top',
                      bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.9, edgecolor='black'),
@@ -1354,11 +1388,26 @@ class StudyAreaVisualizer:
                 # Fallback to OpenStreetMap
                 study_gdf_web.plot(ax=ax, alpha=0.15, edgecolor='red', facecolor='yellow', linewidth=3)
                 
+                # Add domain of interest polygon if provided
+                if polygon_gdf_web is not None:
+                    print("Plotting domain of interest polygon on OpenStreetMap fallback...")
+                    polygon_gdf_web.plot(ax=ax, alpha=0.3, edgecolor='blue', facecolor='lightblue', linewidth=2, label='Domain of Interest')
+                    print("✅ Domain of interest polygon plotted on OpenStreetMap fallback")
+                
                 ctx.add_basemap(ax, crs=study_gdf_web.crs.to_string(), 
                                 source=ctx.providers.OpenStreetMap.Mapnik,
                                 attribution='© OpenStreetMap contributors')
                 
                 ax.set_title('Study Area - Geographic Context', fontsize=14, fontweight='bold')
+                
+                # Add legend if polygon was plotted
+                if polygon_gdf_web is not None:
+                    from matplotlib.patches import Patch
+                    legend_elements = [
+                        Patch(facecolor='yellow', alpha=0.15, edgecolor='red', label='Study Area Bounds'),
+                        Patch(facecolor='lightblue', alpha=0.3, edgecolor='blue', label='Domain of Interest')
+                    ]
+                    ax.legend(handles=legend_elements, loc='upper right')
                 
                 # Convert Web Mercator bounds back to lat/lon for axis labels
                 transformer = Transformer.from_crs("EPSG:3857", "EPSG:4326", always_xy=True)
@@ -1382,7 +1431,7 @@ class StudyAreaVisualizer:
                 ax.set_ylabel('Latitude', fontsize=12)
                 
                 # Add area information
-                info_text = f'Area: {self.area_km2:.2f} km²\nBounds: {self.study_bounds}\nCenter: ({np.mean(self.study_bounds[::2]):.4f}°E, {np.mean(self.study_bounds[1::2]):.4f}°N)'
+                info_text = f'Area: {self.area_km2:.2f} km²\nBounds: ({self.study_bounds[0]:.2f}, {self.study_bounds[1]:.2f}, {self.study_bounds[2]:.2f}, {self.study_bounds[3]:.2f})\nCenter: ({np.mean(self.study_bounds[::2]):.2f}°E, {np.mean(self.study_bounds[1::2]):.2f}°N)'
                 ax.text(0.02, 0.98, info_text, 
                          transform=ax.transAxes, ha='left', va='top',
                          bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.9, edgecolor='black'),
@@ -1396,6 +1445,23 @@ class StudyAreaVisualizer:
                 
                 # Fallback to simple plot with lat/lon coordinates
                 study_gdf.plot(ax=ax, alpha=0.15, edgecolor='red', facecolor='lightblue', linewidth=2)
+                
+                # Add domain of interest polygon if provided (in original CRS)
+                if self.polygon_gdf is not None:
+                    print("Adding domain of interest polygon to simple plot...")
+                    # Use original polygon in EPSG:4326
+                    polygon_to_plot = self.polygon_gdf.to_crs('EPSG:4326') if self.polygon_gdf.crs != 'EPSG:4326' else self.polygon_gdf
+                    polygon_to_plot.plot(ax=ax, alpha=0.3, edgecolor='blue', facecolor='lightblue', linewidth=2, label='Domain of Interest')
+                    print("✅ Domain of interest polygon added to simple plot")
+                    
+                    # Add legend
+                    from matplotlib.patches import Patch
+                    legend_elements = [
+                        Patch(facecolor='lightblue', alpha=0.15, edgecolor='red', label='Study Area Bounds'),
+                        Patch(facecolor='lightblue', alpha=0.3, edgecolor='blue', label='Domain of Interest')
+                    ]
+                    ax.legend(handles=legend_elements, loc='upper right')
+                
                 ax.set_title('Study Area - Simple View', fontsize=14, fontweight='bold')
                 ax.set_xlabel('Longitude (°E)', fontsize=12)
                 ax.set_ylabel('Latitude (°N)', fontsize=12)
@@ -1464,22 +1530,50 @@ class StudyAreaVisualizer:
                 fill=True,
                 fillColor='yellow',
                 fillOpacity=0.1,  # Much more transparent
-                popup=f'Study Area<br>Area: {self.area_km2:.2f} km²<br>Bounds: {self.study_bounds[0]:.4f}°E to {self.study_bounds[2]:.4f}°E<br>{self.study_bounds[1]:.4f}°N to {self.study_bounds[3]:.4f}°N'
+                popup=f'Study Area<br>Area: {self.area_km2:.2f} km²<br>Bounds: {self.study_bounds[0]:.2f}°E to {self.study_bounds[2]:.2f}°E<br>{self.study_bounds[1]:.2f}°N to {self.study_bounds[3]:.2f}°N'
             ).add_to(study_map)
+            
+            # Add domain of interest polygon if provided
+            if self.polygon_gdf is not None:
+                try:
+                    print("Adding domain of interest polygon to interactive map...")
+                    # Ensure polygon is in EPSG:4326
+                    polygon_to_plot = self.polygon_gdf.to_crs('EPSG:4326') if self.polygon_gdf.crs != 'EPSG:4326' else self.polygon_gdf
+                    print(f"   Polygon CRS: {polygon_to_plot.crs}")
+                    print(f"   Polygon bounds: {polygon_to_plot.total_bounds}")
+                    print(f"   Number of polygons: {len(polygon_to_plot)}")
+                    
+                    # Add polygon to map
+                    folium.GeoJson(
+                        polygon_to_plot.to_json(),
+                        style_function=lambda x: {
+                            'fillColor': 'lightblue',
+                            'color': 'blue',
+                            'weight': 2,
+                            'fillOpacity': 0.3,
+                        },
+                        popup=folium.Popup('Domain of Interest', parse_html=True),
+                        tooltip='Domain of Interest Polygon'
+                    ).add_to(study_map)
+                    print("✅ Domain of interest polygon added to interactive map")
+                except Exception as e:
+                    print(f"⚠️  Could not add polygon to interactive map: {e}")
+                    import traceback
+                    traceback.print_exc()
             
             # Add center marker
             folium.Marker(
                 [center_lat, center_lon],
-                popup=f'Study Area Center<br>({center_lon:.4f}°E, {center_lat:.4f}°N)',
+                popup=f'Study Area Center<br>({center_lon:.2f}°E, {center_lat:.2f}°N)',
                 icon=folium.Icon(color='red', icon='info-sign')
             ).add_to(study_map)
             
             # Add corner markers with lat/lon labels
             corners = [
-                ([self.study_bounds[1], self.study_bounds[0]], f'SW Corner<br>({self.study_bounds[0]:.4f}°E, {self.study_bounds[1]:.4f}°N)'),
-                ([self.study_bounds[1], self.study_bounds[2]], f'SE Corner<br>({self.study_bounds[2]:.4f}°E, {self.study_bounds[1]:.4f}°N)'),
-                ([self.study_bounds[3], self.study_bounds[0]], f'NW Corner<br>({self.study_bounds[0]:.4f}°E, {self.study_bounds[3]:.4f}°N)'),
-                ([self.study_bounds[3], self.study_bounds[2]], f'NE Corner<br>({self.study_bounds[2]:.4f}°E, {self.study_bounds[3]:.4f}°N)')
+                ([self.study_bounds[1], self.study_bounds[0]], f'SW Corner<br>({self.study_bounds[0]:.2f}°E, {self.study_bounds[1]:.2f}°N)'),
+                ([self.study_bounds[1], self.study_bounds[2]], f'SE Corner<br>({self.study_bounds[2]:.2f}°E, {self.study_bounds[1]:.2f}°N)'),
+                ([self.study_bounds[3], self.study_bounds[0]], f'NW Corner<br>({self.study_bounds[0]:.2f}°E, {self.study_bounds[3]:.2f}°N)'),
+                ([self.study_bounds[3], self.study_bounds[2]], f'NE Corner<br>({self.study_bounds[2]:.2f}°E, {self.study_bounds[3]:.2f}°N)')
             ]
             
             for (lat, lon), label in corners:
@@ -1583,7 +1677,7 @@ class StudyAreaVisualizer:
         # Print summary
         print(f"\n✅ Study area visualization completed!")
         print(f"   Total area: {self.area_km2:.2f} km²")
-        print(f"   Bounding box: {self.study_bounds[0]:.4f}°E to {self.study_bounds[2]:.4f}°E, {self.study_bounds[1]:.4f}°N to {self.study_bounds[3]:.4f}°N")
+        print(f"   Bounding box: {self.study_bounds[0]:.2f}°E to {self.study_bounds[2]:.2f}°E, {self.study_bounds[1]:.2f}°N to {self.study_bounds[3]:.2f}°N")
         
         return results
 
