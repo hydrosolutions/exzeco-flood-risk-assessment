@@ -857,352 +857,240 @@ class ExzecoVisualizer:
         # add classified risk zones
         logger.info("Risk classification layer not implemented - placeholder added")
     
-    def plot_flood_probability_with_shapefile(self, noise_level: str, shapefile_gdf: Optional[gpd.GeoDataFrame] = None,
-                                             threshold: float = 0.5, figsize: Tuple[int, int] = (15, 8),
-                                             show_plot: bool = True, save_path: Optional[Union[str, Path]] = None) -> plt.Figure:
+    def plot_flood_probability_with_shapefile(self, 
+                                             noise_level: str = 'exzeco_100cm',
+                                             shapefile_gdf=None,
+                                             threshold: float = 0.5,
+                                             figsize: Tuple[int, int] = (15, 8),
+                                             show_plot: bool = True,
+                                             save_path: Optional[Path] = None) -> plt.Figure:
         """
-        Create flood probability and binary flood zone visualization with shapefile overlay.
-        
-        This method creates a side-by-side visualization showing:
-        1. Continuous flood probability map (0-1 scale)
-        2. Binary flood zones based on probability threshold
-        Both plots include shapefile boundary overlays if provided.
+        Create flood probability visualization with shapefile overlay.
         
         Parameters
         ----------
         noise_level : str
-            Noise level key (e.g., 'exzeco_100cm')
+            EXZECO result level to display
         shapefile_gdf : GeoDataFrame, optional
-            GeoDataFrame with shapefile boundaries to overlay
-        threshold : float, default 0.5
-            Probability threshold for binary flood zones
-        figsize : tuple, default (15, 8)
-            Figure size as (width, height) in inches
-        show_plot : bool, default True
+            Shapefile to overlay on the plot
+        threshold : float
+            Probability threshold for binary classification
+        figsize : tuple
+            Figure size (width, height)
+        show_plot : bool
             Whether to display the plot
-        save_path : str or Path, optional
+        save_path : Path, optional
             Path to save the figure
             
         Returns
         -------
-        matplotlib.figure.Figure
-            The created figure object
-            
-        Raises
-        ------
-        ValueError
-            If the specified noise level is not found in results
-        RuntimeError
-            If DEM data is not loaded
+        plt.Figure
+            Matplotlib figure
         """
         if noise_level not in self.results:
-            raise ValueError(f"Noise level '{noise_level}' not found in results. "
-                           f"Available: {list(self.results.keys())}")
+            raise ValueError(f"Noise level {noise_level} not in results")
         
-        if self.dem_path is None:
-            raise RuntimeError("DEM path not provided. Cannot determine spatial extent.")
-        
-        # Get probability map for the specified noise level
         prob_map = self.results[noise_level]['probability_map']
         
-        # Get DEM bounds and transform for proper coordinate mapping
-        with rasterio.open(self.dem_path) as src:
-            dem_bounds = src.bounds
-            dem_transform = src.transform
-        
-        # Create extent for matplotlib imshow [left, right, bottom, top]
-        extent = [dem_bounds.left, dem_bounds.right, dem_bounds.bottom, dem_bounds.top]
-        
         # Create figure with subplots
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
+        fig, axes = plt.subplots(1, 2, figsize=figsize)
         
-        # Plot 1: Continuous Flood Probability
-        im1 = ax1.imshow(prob_map, cmap='Blues', vmin=0, vmax=1, extent=extent, origin='upper')
+        # Plot 1: Continuous probability map
+        im1 = axes[0].imshow(prob_map, cmap='Blues', vmin=0, vmax=1, alpha=0.8)
+        axes[0].set_title(f'Flood Probability Map\n({noise_level.replace("_", " ").title()})', 
+                         fontsize=12, fontweight='bold')
+        axes[0].set_xlabel('X (pixels)')
+        axes[0].set_ylabel('Y (pixels)')
         
-        # Overlay shapefile boundaries if provided
+        # Add colorbar
+        cbar1 = plt.colorbar(im1, ax=axes[0], shrink=0.8)
+        cbar1.set_label('Flood Probability', rotation=270, labelpad=20)
+        
+        # Plot 2: Binary flood zones
+        binary_flood = (prob_map > threshold).astype(int)
+        im2 = axes[1].imshow(binary_flood, cmap='Reds', alpha=0.8)
+        axes[1].set_title(f'Flood Zones (>{threshold*100:.0f}% probability)', 
+                         fontsize=12, fontweight='bold')
+        axes[1].set_xlabel('X (pixels)')
+        axes[1].set_ylabel('Y (pixels)')
+        
+        # Add colorbar for binary map
+        cbar2 = plt.colorbar(im2, ax=axes[1], shrink=0.8)
+        cbar2.set_label('Flood Zone', rotation=270, labelpad=20)
+        
+        # Add shapefile overlay if provided
         if shapefile_gdf is not None:
             try:
-                # Ensure shapefile is in the same CRS as the DEM (typically EPSG:4326)
-                if shapefile_gdf.crs != 'EPSG:4326':
-                    shapefile_gdf = shapefile_gdf.to_crs('EPSG:4326')
-                shapefile_gdf.boundary.plot(ax=ax1, color='black', linewidth=1, alpha=0.8)
+                # Transform shapefile coordinates to pixel coordinates
+                shapefile_bounds = shapefile_gdf.total_bounds
+                prob_map_height, prob_map_width = prob_map.shape
+                
+                # Calculate scaling factors
+                x_scale = prob_map_width / (shapefile_bounds[2] - shapefile_bounds[0])
+                y_scale = prob_map_height / (shapefile_bounds[3] - shapefile_bounds[1])
+                
+                # Plot shapefile boundary on both subplots
+                for ax in axes:
+                    for geom in shapefile_gdf.geometry:
+                        if geom.geom_type == 'Polygon':
+                            coords = list(geom.exterior.coords)
+                        elif geom.geom_type == 'MultiPolygon':
+                            coords = []
+                            for poly in geom.geoms:
+                                coords.extend(list(poly.exterior.coords))
+                        else:
+                            continue
+                        
+                        # Transform coordinates to pixel space
+                        x_pixels = [(x - shapefile_bounds[0]) * x_scale for x, _ in coords]
+                        y_pixels = [prob_map_height - (y - shapefile_bounds[1]) * y_scale for _, y in coords]
+                        
+                        # Plot boundary with linewidth=1 as requested
+                        ax.plot(x_pixels, y_pixels, color='black', linewidth=1, alpha=0.8)
+                
+                # Add legend to the first subplot only
+                axes[0].plot([], [], color='black', linewidth=1, label='Study Area Boundary')
+                axes[0].legend(loc='upper right', fontsize=8)
+                
             except Exception as e:
-                logger.warning(f"Failed to overlay shapefile on probability plot: {e}")
+                logger.warning(f"Could not overlay shapefile: {e}")
+                # Fallback to text annotation if shapefile overlay fails
+                axes[0].text(0.02, 0.98, 'Shapefile overlay failed', 
+                           transform=axes[0].transAxes, 
+                           bbox=dict(boxstyle="round,pad=0.3", facecolor="yellow", alpha=0.8),
+                           verticalalignment='top')
+                axes[1].text(0.02, 0.98, 'Shapefile overlay failed', 
+                           transform=axes[1].transAxes,
+                           bbox=dict(boxstyle="round,pad=0.3", facecolor="yellow", alpha=0.8),
+                           verticalalignment='top')
         
-        # Add colorbar and labels for probability plot
-        cbar1 = plt.colorbar(im1, ax=ax1, label='Flood Probability', shrink=0.8)
-        noise_cm = noise_level.replace('exzeco_', '').replace('cm', 'cm')
-        ax1.set_title(f'EXZECO Flood Probability ({noise_cm} noise)\nwith Domain Boundaries', fontsize=12)
-        ax1.set_xlabel('Longitude')
-        ax1.set_ylabel('Latitude')
-        
-        # Plot 2: Binary Flood Zones
-        binary_flood = prob_map > threshold
-        im2 = ax2.imshow(binary_flood, cmap='Reds', extent=extent, origin='upper')
-        
-        # Overlay shapefile boundaries if provided
-        if shapefile_gdf is not None:
-            try:
-                shapefile_gdf.boundary.plot(ax=ax2, color='black', linewidth=1, alpha=0.8)
-            except Exception as e:
-                logger.warning(f"Failed to overlay shapefile on binary plot: {e}")
-        
-        # Add colorbar and labels for binary plot
-        cbar2 = plt.colorbar(im2, ax=ax2, label=f'Flood Zone (>{threshold*100:.0f}% prob)', shrink=0.8)
-        ax2.set_title(f'Binary Flood Zones (>{threshold*100:.0f}% threshold)\nwith Domain Boundaries', fontsize=12)
-        ax2.set_xlabel('Longitude')
-        ax2.set_ylabel('Latitude')
-        
-        # Ensure both plots have equal aspect ratio for proper geographic display
-        ax1.set_aspect('equal')
-        ax2.set_aspect('equal')
-        
-        # Apply tight layout
         plt.tight_layout()
         
-        # Save figure if path provided
-        if save_path is not None:
-            save_path = Path(save_path)
+        # Save if requested
+        if save_path:
             save_path.parent.mkdir(parents=True, exist_ok=True)
-            fig.savefig(save_path, dpi=300, bbox_inches='tight')
-            logger.info(f"Figure saved to {save_path}")
+            plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='white')
+            logger.info(f"Flood probability plot saved to {save_path}")
         
-        # Show plot if requested
+        # Show if requested
         if show_plot:
             plt.show()
         
         return fig
-    
-    def plot_spatial_features_analysis(self, analyzer, results: Dict, 
-                                     shapefile_gdf: Optional[gpd.GeoDataFrame] = None,
+
+    def plot_spatial_features_analysis(self,
+                                     analyzer=None,
+                                     results: Dict = None,
                                      figsize_endorheic: Tuple[int, int] = (10, 8),
                                      figsize_drainage: Tuple[int, int] = (12, 8),
+                                     shapefile_gdf=None,
                                      show_plots: bool = True,
-                                     save_paths: Optional[Dict[str, Union[str, Path]]] = None) -> Dict[str, plt.Figure]:
+                                     save_paths: Optional[Dict] = None) -> Dict:
         """
-        Analyze and visualize spatial features including endorheic basins and drainage area classification.
-        
-        This method performs two main analyses:
-        1. Detects and visualizes endorheic (closed) basins using hillshade overlay
-        2. Classifies and visualizes drainage areas with flood zones
-        Both plots include shapefile boundary overlays if provided.
+        Create spatial features analysis including endorheic basins and drainage classification.
         
         Parameters
         ----------
         analyzer : ExzecoAnalysis
-            EXZECO analyzer instance with loaded DEM data
+            EXZECO analyzer instance
         results : dict
-            EXZECO analysis results containing probability maps
+            EXZECO analysis results
+        figsize_endorheic : tuple
+            Figure size for endorheic analysis
+        figsize_drainage : tuple
+            Figure size for drainage analysis
         shapefile_gdf : GeoDataFrame, optional
-            GeoDataFrame with shapefile boundaries to overlay
-        figsize_endorheic : tuple, default (10, 8)
-            Figure size for endorheic basins plot
-        figsize_drainage : tuple, default (12, 8)
-            Figure size for drainage classification plot
-        show_plots : bool, default True
-            Whether to display the plots
+            Shapefile to overlay
+        show_plots : bool
+            Whether to display plots
         save_paths : dict, optional
-            Dictionary with save paths for plots. Keys: 'endorheic', 'drainage'
+            Paths to save figures
             
         Returns
         -------
         dict
-            Dictionary containing matplotlib figure objects with keys 'endorheic' and 'drainage'
-            
-        Raises
-        ------
-        ValueError
-            If analyzer doesn't have DEM data loaded or results are empty
+            Dictionary of created figures
         """
-        if not hasattr(analyzer, 'dem_data') or analyzer.dem_data is None:
-            raise ValueError("Analyzer must have DEM data loaded")
-        
-        if not results:
-            raise ValueError("Results dictionary cannot be empty")
-        
-        from matplotlib.colors import LightSource
-        from matplotlib.patches import Patch
+        if results is None:
+            results = self.results
         
         figures = {}
         
+        # Section 6 Detect spatial Features
+        # Identify endorheic basins and drainage patterns.
+        
+        # Import required modules for hillshade calculation
+        from matplotlib.colors import LightSource
+        
         print("Detecting endorheic (closed) basins...")
         
-        # Create hillshade for visualization
+        # First, create hillshade for visualization
         ls = LightSource(azdeg=315, altdeg=45)
-        hillshade = ls.hillshade(analyzer.dem_data, vert_exag=2, 
-                                dx=analyzer.resolution, dy=analyzer.resolution)
+        hillshade = ls.hillshade(analyzer.dem_data, vert_exag=2, dx=analyzer.resolution, dy=analyzer.resolution)
         
         # Detect endorheic basins
         endorheic_mask = analyzer.detect_endorheic_basins()
         
-        # Get DEM extent for proper coordinate mapping
-        if self.dem_path:
-            with rasterio.open(self.dem_path) as src:
-                dem_bounds = src.bounds
-                dem_extent = [dem_bounds.left, dem_bounds.right, dem_bounds.bottom, dem_bounds.top]
-        else:
-            # Fallback to pixel coordinates
-            dem_extent = None
-        
-        # Figure 1: Endorheic Basins Visualization
-        fig1, ax1 = plt.subplots(1, 1, figsize=figsize_endorheic)
-        
+        # Visualize endorheic areas
         if np.any(endorheic_mask):
-            # Display hillshade as background
-            if dem_extent:
-                ax1.imshow(hillshade, cmap='gray', alpha=0.5, extent=dem_extent, origin='upper')
-                # Overlay endorheic basins
-                im1 = ax1.imshow(endorheic_mask, cmap='Reds', alpha=0.7, extent=dem_extent, origin='upper')
-            else:
-                ax1.imshow(hillshade, cmap='gray', alpha=0.5)
-                im1 = ax1.imshow(endorheic_mask, cmap='Reds', alpha=0.7)
+            plt.figure(figsize=figsize_endorheic)
+            plt.imshow(hillshade, cmap='gray', alpha=0.5)
+            plt.imshow(endorheic_mask, cmap='Reds', alpha=0.7)
+            plt.colorbar(label='Endorheic Basin')
+            plt.title('Endorheic Basins Detection')
+            plt.xlabel('Pixels East')
+            plt.ylabel('Pixels North')
             
-            # Add colorbar and labels
-            cbar1 = plt.colorbar(im1, ax=ax1, label='Endorheic Basin')
-            ax1.set_title('Endorheic Basins Detection\nwith Domain Boundaries', fontsize=14)
+            if save_paths and 'endorheic' in save_paths:
+                plt.savefig(save_paths['endorheic'], dpi=300, bbox_inches='tight')
             
-            # Calculate and report endorheic area
+            if show_plots:
+                plt.show()
+            
             endorheic_area = np.sum(endorheic_mask) * (analyzer.resolution**2) / 1e6
-            ax1.text(0.02, 0.98, f'Total endorheic area: {endorheic_area:.2f} km²', 
-                    transform=ax1.transAxes, verticalalignment='top',
-                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-            
             print(f"Total endorheic area: {endorheic_area:.2f} km²")
         else:
-            # Show hillshade only if no endorheic basins detected
-            if dem_extent:
-                ax1.imshow(hillshade, cmap='gray', extent=dem_extent, origin='upper')
-            else:
-                ax1.imshow(hillshade, cmap='gray')
-            ax1.set_title('Hillshade - No Significant Endorheic Basins Detected\nwith Domain Boundaries', fontsize=14)
             print("No significant endorheic basins detected")
         
-        # Overlay shapefile boundaries on endorheic plot
-        if shapefile_gdf is not None:
-            try:
-                # Ensure shapefile is in the same CRS (typically EPSG:4326)
-                if shapefile_gdf.crs != 'EPSG:4326':
-                    shapefile_gdf = shapefile_gdf.to_crs('EPSG:4326')
-                
-                print(f"Adding shapefile overlay to endorheic plot...")
-                print(f"  Shapefile bounds: {shapefile_gdf.total_bounds}")
-                if dem_extent:
-                    print(f"  DEM extent: {dem_extent}")
-                
-                # Plot with black outline and linewidth=1
-                shapefile_gdf.boundary.plot(ax=ax1, color='black', linewidth=1, alpha=1.0, zorder=10)
-                print(f"  ✅ Shapefile boundary added to endorheic plot")
-            except Exception as e:
-                logger.warning(f"Failed to overlay shapefile on endorheic plot: {e}")
-                print(f"  ❌ Failed to add shapefile overlay: {e}")
-        else:
-            print("  ⚠️  No shapefile provided for boundary overlay")
-        
-        if dem_extent:
-            ax1.set_xlabel('Longitude')
-            ax1.set_ylabel('Latitude')
-        else:
-            ax1.set_xlabel('Pixels East')
-            ax1.set_ylabel('Pixels North')
-            
-        plt.tight_layout()
-        figures['endorheic'] = fig1
-        
-        # Save endorheic figure if path provided
-        if save_paths and 'endorheic' in save_paths:
-            save_path = Path(save_paths['endorheic'])
-            save_path.parent.mkdir(parents=True, exist_ok=True)
-            fig1.savefig(save_path, dpi=300, bbox_inches='tight')
-            logger.info(f"Endorheic basins figure saved to {save_path}")
-        
-        if show_plots:
-            plt.show()
-        
-        # Figure 2: Drainage Area Classification
+        # Classify drainage areas
         print("Classifying drainage areas...")
         
         # Get the highest noise level result
         highest_level = f'exzeco_{int(analyzer.config.noise_levels[-1]*100)}cm'
-        if highest_level not in results:
-            # Fallback to last available result
-            highest_level = list(results.keys())[-1]
-            logger.warning(f"Expected noise level not found, using {highest_level}")
-        
         prob_map = results[highest_level]['probability_map']
         
         # Classify by drainage area
         classified = analyzer.classify_drainage_areas(prob_map)
         
-        # Create drainage classification figure
-        fig2, ax2 = plt.subplots(1, 1, figsize=figsize_drainage)
+        # Visualize classification
+        plt.figure(figsize=figsize_drainage)
+        plt.imshow(classified, cmap='viridis')
+        plt.colorbar(label='Drainage Class')
+        plt.title('Flood Zones by Drainage Area Classification')
+        plt.xlabel('Pixels East')
+        plt.ylabel('Pixels North')
         
-        # Display classification with reversed colormap
-        if dem_extent:
-            im2 = ax2.imshow(classified, cmap='viridis_r', extent=dem_extent, origin='upper')
-        else:
-            im2 = ax2.imshow(classified, cmap='viridis_r')
-        
-        # Add colorbar and labels
-        cbar2 = plt.colorbar(im2, ax=ax2, label='Drainage Class')
-        ax2.set_title('Flood Zones by Drainage Area Classification\nwith Domain Boundaries', fontsize=14)
-        
-        # Overlay shapefile boundaries on drainage plot
-        if shapefile_gdf is not None:
-            try:
-                # Ensure shapefile is in the same CRS (typically EPSG:4326)
-                if shapefile_gdf.crs != 'EPSG:4326':
-                    shapefile_gdf = shapefile_gdf.to_crs('EPSG:4326')
-                
-                print(f"Adding shapefile overlay to drainage classification plot...")
-                print(f"  Shapefile bounds: {shapefile_gdf.total_bounds}")
-                if dem_extent:
-                    print(f"  DEM extent: {dem_extent}")
-                
-                # Plot with black outline and linewidth=1
-                shapefile_gdf.boundary.plot(ax=ax2, color='black', linewidth=1, alpha=1.0, zorder=10)
-                print(f"  ✅ Shapefile boundary added to drainage plot")
-            except Exception as e:
-                logger.warning(f"Failed to overlay shapefile on drainage plot: {e}")
-                print(f"  ❌ Failed to add shapefile overlay: {e}")
-        else:
-            print("  ⚠️  No shapefile provided for boundary overlay")
-        
-        if dem_extent:
-            ax2.set_xlabel('Longitude')
-            ax2.set_ylabel('Latitude')
-        else:
-            ax2.set_xlabel('Pixels East')
-            ax2.set_ylabel('Pixels North')
-        
-        # Add legend for drainage classes (with reversed colormap)
+        # Add legend for drainage classes
+        from matplotlib.patches import Patch
         legend_elements = [Patch(facecolor='white', label='No flood')]
         
-        # Use simplified legend with standard drainage thresholds and reversed colors
+        # Use a simplified legend since config.drainage_classes might not be available
         drainage_thresholds = [0.01, 0.05, 0.1, 0.5, 1.0]  # km²
         for i, thresh in enumerate(drainage_thresholds[:5]):
-            # Reverse the color index to match reversed colormap
-            legend_elements.append(Patch(facecolor=plt.cm.viridis_r(i/5), 
-                                       label=f'{thresh} km²'))
+            legend_elements.append(Patch(facecolor=plt.cm.viridis(i/5), 
+                                         label=f'{thresh} km²'))
+        plt.legend(handles=legend_elements, loc='upper right')
         
-        ax2.legend(handles=legend_elements, loc='upper right')
-        
-        plt.tight_layout()
-        figures['drainage'] = fig2
-        
-        # Save drainage figure if path provided
         if save_paths and 'drainage' in save_paths:
-            save_path = Path(save_paths['drainage'])
-            save_path.parent.mkdir(parents=True, exist_ok=True)
-            fig2.savefig(save_path, dpi=300, bbox_inches='tight')
-            logger.info(f"Drainage classification figure saved to {save_path}")
+            plt.savefig(save_paths['drainage'], dpi=300, bbox_inches='tight')
         
         if show_plots:
             plt.show()
         
-        print("✅ Spatial features analysis completed")
+        print(f"✅ Spatial features analysis completed")
         
         return figures
-    
+
     def export_visualizations(self, output_dir: Union[str, Path], formats: List[str] = None):
         """
         Export all visualizations to files.
