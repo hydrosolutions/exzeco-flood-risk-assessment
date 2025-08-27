@@ -1033,13 +1033,52 @@ class ExzecoVisualizer:
         
         # Visualize endorheic areas
         if np.any(endorheic_mask):
-            plt.figure(figsize=figsize_endorheic)
+            fig = plt.figure(figsize=figsize_endorheic)
+            ax = plt.gca()
             plt.imshow(hillshade, cmap='gray', alpha=0.5)
             plt.imshow(endorheic_mask, cmap='Reds', alpha=0.7)
             plt.colorbar(label='Endorheic Basin')
             plt.title('Endorheic Basins Detection')
             plt.xlabel('Pixels East')
             plt.ylabel('Pixels North')
+            
+            # Overlay shapefile if provided
+            if shapefile_gdf is not None:
+                try:
+                    # Transform shapefile coordinates to pixel coordinates using same approach as flood probability plot
+                    shapefile_bounds = shapefile_gdf.total_bounds
+                    plot_height, plot_width = hillshade.shape
+                    
+                    # Calculate scaling factors
+                    x_scale = plot_width / (shapefile_bounds[2] - shapefile_bounds[0])
+                    y_scale = plot_height / (shapefile_bounds[3] - shapefile_bounds[1])
+                    
+                    for geom in shapefile_gdf.geometry:
+                        if geom.geom_type == 'Polygon':
+                            coords = list(geom.exterior.coords)
+                        elif geom.geom_type == 'MultiPolygon':
+                            coords = []
+                            for poly in geom.geoms:
+                                coords.extend(list(poly.exterior.coords))
+                        else:
+                            continue
+                        
+                        # Transform coordinates to pixel space
+                        x_pixels = [(x - shapefile_bounds[0]) * x_scale for x, _ in coords]
+                        y_pixels = [plot_height - (y - shapefile_bounds[1]) * y_scale for _, y in coords]
+                        
+                        # Plot boundary
+                        ax.plot(x_pixels, y_pixels, 'k-', linewidth=1, alpha=0.8)
+                    
+                    ax.plot([], [], 'k-', linewidth=1, label='Study Area Boundary')
+                    ax.legend(loc='upper right', fontsize=8)
+                    
+                except Exception as e:
+                    print(f"Warning: Could not overlay shapefile on endorheic plot: {e}")
+                    import traceback
+                    traceback.print_exc()
+            
+            figures['endorheic'] = fig
             
             if save_paths and 'endorheic' in save_paths:
                 plt.savefig(save_paths['endorheic'], dpi=300, bbox_inches='tight')
@@ -1063,8 +1102,9 @@ class ExzecoVisualizer:
         classified = analyzer.classify_drainage_areas(prob_map)
         
         # Visualize classification
-        plt.figure(figsize=figsize_drainage)
-        plt.imshow(classified, cmap='viridis')
+        fig = plt.figure(figsize=figsize_drainage)
+        ax = plt.gca()
+        plt.imshow(classified, cmap='viridis_r')
         plt.colorbar(label='Drainage Class')
         plt.title('Flood Zones by Drainage Area Classification')
         plt.xlabel('Pixels East')
@@ -1077,9 +1117,47 @@ class ExzecoVisualizer:
         # Use a simplified legend since config.drainage_classes might not be available
         drainage_thresholds = [0.01, 0.05, 0.1, 0.5, 1.0]  # km²
         for i, thresh in enumerate(drainage_thresholds[:5]):
-            legend_elements.append(Patch(facecolor=plt.cm.viridis(i/5), 
+            legend_elements.append(Patch(facecolor=plt.cm.viridis_r(i/5), 
                                          label=f'{thresh} km²'))
+        
+        # Overlay shapefile if provided
+        if shapefile_gdf is not None:
+            try:
+                # Transform shapefile coordinates to pixel coordinates using same approach as flood probability plot
+                shapefile_bounds = shapefile_gdf.total_bounds
+                plot_height, plot_width = classified.shape
+                
+                # Calculate scaling factors
+                x_scale = plot_width / (shapefile_bounds[2] - shapefile_bounds[0])
+                y_scale = plot_height / (shapefile_bounds[3] - shapefile_bounds[1])
+                
+                for geom in shapefile_gdf.geometry:
+                    if geom.geom_type == 'Polygon':
+                        coords = list(geom.exterior.coords)
+                    elif geom.geom_type == 'MultiPolygon':
+                        coords = []
+                        for poly in geom.geoms:
+                            coords.extend(list(poly.exterior.coords))
+                    else:
+                        continue
+                    
+                    # Transform coordinates to pixel space
+                    x_pixels = [(x - shapefile_bounds[0]) * x_scale for x, _ in coords]
+                    y_pixels = [plot_height - (y - shapefile_bounds[1]) * y_scale for _, y in coords]
+                    
+                    # Plot boundary
+                    ax.plot(x_pixels, y_pixels, 'k-', linewidth=1, alpha=0.8)
+                
+                # Add boundary to legend
+                legend_elements.append(Patch(facecolor='black', label='Study Area Boundary'))
+                
+            except Exception as e:
+                print(f"Warning: Could not overlay shapefile on drainage plot: {e}")
+                import traceback
+                traceback.print_exc()
+        
         plt.legend(handles=legend_elements, loc='upper right')
+        figures['drainage'] = fig
         
         if save_paths and 'drainage' in save_paths:
             plt.savefig(save_paths['drainage'], dpi=300, bbox_inches='tight')
