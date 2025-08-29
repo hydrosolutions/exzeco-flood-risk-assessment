@@ -892,15 +892,25 @@ class ExzecoVisualizer:
         
         prob_map = self.results[noise_level]['probability_map']
         
+        # Get extent and labels
+        extent = [self.bounds.left, self.bounds.right, self.bounds.bottom, self.bounds.top]
+        try:
+            crs_name = self.crs.name
+            xlabel = f"Easting ({crs_name})"
+            ylabel = f"Northing ({crs_name})"
+        except Exception:
+            xlabel = "Longitude"
+            ylabel = "Latitude"
+
         # Create figure with subplots
-        fig, axes = plt.subplots(1, 2, figsize=figsize)
+        fig, axes = plt.subplots(1, 2, figsize=figsize, sharex=True, sharey=True)
         
         # Plot 1: Continuous probability map
-        im1 = axes[0].imshow(prob_map, cmap='Blues', vmin=0, vmax=1, alpha=0.8)
+        im1 = axes[0].imshow(prob_map, cmap='Blues', vmin=0, vmax=1, alpha=0.8, extent=extent)
         axes[0].set_title(f'Flood Probability Map\n({noise_level.replace("_", " ").title()})', 
                          fontsize=12, fontweight='bold')
-        axes[0].set_xlabel('X (pixels)')
-        axes[0].set_ylabel('Y (pixels)')
+        axes[0].set_xlabel(xlabel)
+        axes[0].set_ylabel(ylabel)
         
         # Add colorbar
         cbar1 = plt.colorbar(im1, ax=axes[0], shrink=0.8)
@@ -908,11 +918,10 @@ class ExzecoVisualizer:
         
         # Plot 2: Binary flood zones
         binary_flood = (prob_map > threshold).astype(int)
-        im2 = axes[1].imshow(binary_flood, cmap='Reds', alpha=0.8)
+        im2 = axes[1].imshow(binary_flood, cmap='Reds', alpha=0.8, extent=extent)
         axes[1].set_title(f'Flood Zones (>{threshold*100:.0f}% probability)', 
                          fontsize=12, fontweight='bold')
-        axes[1].set_xlabel('X (pixels)')
-        axes[1].set_ylabel('Y (pixels)')
+        axes[1].set_xlabel(xlabel)
         
         # Add colorbar for binary map
         cbar2 = plt.colorbar(im2, ax=axes[1], shrink=0.8)
@@ -921,36 +930,20 @@ class ExzecoVisualizer:
         # Add shapefile overlay if provided
         if shapefile_gdf is not None:
             try:
-                # Transform shapefile coordinates to pixel coordinates
-                shapefile_bounds = shapefile_gdf.total_bounds
-                prob_map_height, prob_map_width = prob_map.shape
-                
-                # Calculate scaling factors
-                x_scale = prob_map_width / (shapefile_bounds[2] - shapefile_bounds[0])
-                y_scale = prob_map_height / (shapefile_bounds[3] - shapefile_bounds[1])
-                
+                # Reproject shapefile to match DEM's CRS
+                if self.crs:
+                    shapefile_reproj = shapefile_gdf.to_crs(self.crs)
+                else:
+                    shapefile_reproj = shapefile_gdf
+
                 # Plot shapefile boundary on both subplots
                 for ax in axes:
-                    for geom in shapefile_gdf.geometry:
-                        if geom.geom_type == 'Polygon':
-                            coords = list(geom.exterior.coords)
-                        elif geom.geom_type == 'MultiPolygon':
-                            coords = []
-                            for poly in geom.geoms:
-                                coords.extend(list(poly.exterior.coords))
-                        else:
-                            continue
-                        
-                        # Transform coordinates to pixel space
-                        x_pixels = [(x - shapefile_bounds[0]) * x_scale for x, _ in coords]
-                        y_pixels = [prob_map_height - (y - shapefile_bounds[1]) * y_scale for _, y in coords]
-                        
-                        # Plot boundary with linewidth=1 as requested
-                        ax.plot(x_pixels, y_pixels, color='black', linewidth=1, alpha=0.8)
+                    shapefile_reproj.plot(ax=ax, facecolor='none', edgecolor='black', linewidth=1)
                 
                 # Add legend to the first subplot only
-                axes[0].plot([], [], color='black', linewidth=1, label='Study Area Boundary')
-                axes[0].legend(loc='upper right', fontsize=8)
+                from matplotlib.lines import Line2D
+                legend_elements = [Line2D([0], [0], color='black', lw=1, label='Study Area Boundary')]
+                axes[0].legend(handles=legend_elements, loc='upper right', fontsize=8)
                 
             except Exception as e:
                 logger.warning(f"Could not overlay shapefile: {e}")
@@ -964,6 +957,9 @@ class ExzecoVisualizer:
                            bbox=dict(boxstyle="round,pad=0.3", facecolor="yellow", alpha=0.8),
                            verticalalignment='top')
         
+        for ax in axes.flat:
+            ax.tick_params(axis='x', rotation=45)
+
         plt.tight_layout()
         
         # Save if requested
@@ -1016,6 +1012,16 @@ class ExzecoVisualizer:
         
         figures = {}
         
+        # Get extent and labels for all plots in this function
+        extent = [self.bounds.left, self.bounds.right, self.bounds.bottom, self.bounds.top]
+        try:
+            crs_name = self.crs.name
+            xlabel = f"Easting ({crs_name})"
+            ylabel = f"Northing ({crs_name})"
+        except Exception:
+            xlabel = "Longitude"
+            ylabel = "Latitude"
+
         # Section 6 Detect spatial Features
         # Identify endorheic basins and drainage patterns.
         
@@ -1035,49 +1041,31 @@ class ExzecoVisualizer:
         if np.any(endorheic_mask):
             fig = plt.figure(figsize=figsize_endorheic)
             ax = plt.gca()
-            plt.imshow(hillshade, cmap='gray', alpha=0.5)
-            plt.imshow(endorheic_mask, cmap='Reds', alpha=0.7)
+            plt.imshow(hillshade, cmap='gray', alpha=0.5, extent=extent)
+            plt.imshow(endorheic_mask, cmap='Reds', alpha=0.7, extent=extent)
             plt.colorbar(label='Endorheic Basin')
             plt.title('Endorheic Basins Detection')
-            plt.xlabel('Pixels East')
-            plt.ylabel('Pixels North')
+            plt.xlabel(xlabel)
+            plt.ylabel(ylabel)
             
             # Overlay shapefile if provided
             if shapefile_gdf is not None:
                 try:
-                    # Transform shapefile coordinates to pixel coordinates using same approach as flood probability plot
-                    shapefile_bounds = shapefile_gdf.total_bounds
-                    plot_height, plot_width = hillshade.shape
+                    if self.crs:
+                        shapefile_reproj = shapefile_gdf.to_crs(self.crs)
+                    else:
+                        shapefile_reproj = shapefile_gdf
                     
-                    # Calculate scaling factors
-                    x_scale = plot_width / (shapefile_bounds[2] - shapefile_bounds[0])
-                    y_scale = plot_height / (shapefile_bounds[3] - shapefile_bounds[1])
+                    shapefile_reproj.plot(ax=ax, facecolor='none', edgecolor='k', linewidth=1)
                     
-                    for geom in shapefile_gdf.geometry:
-                        if geom.geom_type == 'Polygon':
-                            coords = list(geom.exterior.coords)
-                        elif geom.geom_type == 'MultiPolygon':
-                            coords = []
-                            for poly in geom.geoms:
-                                coords.extend(list(poly.exterior.coords))
-                        else:
-                            continue
-                        
-                        # Transform coordinates to pixel space
-                        x_pixels = [(x - shapefile_bounds[0]) * x_scale for x, _ in coords]
-                        y_pixels = [plot_height - (y - shapefile_bounds[1]) * y_scale for _, y in coords]
-                        
-                        # Plot boundary
-                        ax.plot(x_pixels, y_pixels, 'k-', linewidth=1, alpha=0.8)
-                    
-                    ax.plot([], [], 'k-', linewidth=1, label='Study Area Boundary')
-                    ax.legend(loc='upper right', fontsize=8)
+                    from matplotlib.lines import Line2D
+                    legend_elements = [Line2D([0], [0], color='black', lw=1, label='Study Area Boundary')]
+                    ax.legend(handles=legend_elements, loc='upper right', fontsize=8)
                     
                 except Exception as e:
                     print(f"Warning: Could not overlay shapefile on endorheic plot: {e}")
-                    import traceback
-                    traceback.print_exc()
             
+            ax.tick_params(axis='x', rotation=45)
             figures['endorheic'] = fig
             
             if save_paths and 'endorheic' in save_paths:
@@ -1104,11 +1092,11 @@ class ExzecoVisualizer:
         # Visualize classification
         fig = plt.figure(figsize=figsize_drainage)
         ax = plt.gca()
-        plt.imshow(classified, cmap='viridis_r')
+        plt.imshow(classified, cmap='viridis_r', extent=extent)
         plt.colorbar(label='Drainage Class')
         plt.title('Flood Zones by Drainage Area Classification')
-        plt.xlabel('Pixels East')
-        plt.ylabel('Pixels North')
+        plt.xlabel(xlabel)
+        plt.ylabel(ylabel)
         
         # Add legend for drainage classes
         from matplotlib.patches import Patch
@@ -1118,44 +1106,25 @@ class ExzecoVisualizer:
         drainage_thresholds = [0.01, 0.05, 0.1, 0.5, 1.0]  # km²
         for i, thresh in enumerate(drainage_thresholds[:5]):
             legend_elements.append(Patch(facecolor=plt.cm.viridis_r(i/5), 
-                                         label=f'{thresh} km²'))
+                                         label=f'> {thresh} km²'))
         
         # Overlay shapefile if provided
         if shapefile_gdf is not None:
             try:
-                # Transform shapefile coordinates to pixel coordinates using same approach as flood probability plot
-                shapefile_bounds = shapefile_gdf.total_bounds
-                plot_height, plot_width = classified.shape
+                if self.crs:
+                    shapefile_reproj = shapefile_gdf.to_crs(self.crs)
+                else:
+                    shapefile_reproj = shapefile_gdf
                 
-                # Calculate scaling factors
-                x_scale = plot_width / (shapefile_bounds[2] - shapefile_bounds[0])
-                y_scale = plot_height / (shapefile_bounds[3] - shapefile_bounds[1])
-                
-                for geom in shapefile_gdf.geometry:
-                    if geom.geom_type == 'Polygon':
-                        coords = list(geom.exterior.coords)
-                    elif geom.geom_type == 'MultiPolygon':
-                        coords = []
-                        for poly in geom.geoms:
-                            coords.extend(list(poly.exterior.coords))
-                    else:
-                        continue
-                    
-                    # Transform coordinates to pixel space
-                    x_pixels = [(x - shapefile_bounds[0]) * x_scale for x, _ in coords]
-                    y_pixels = [plot_height - (y - shapefile_bounds[1]) * y_scale for _, y in coords]
-                    
-                    # Plot boundary
-                    ax.plot(x_pixels, y_pixels, 'k-', linewidth=1, alpha=0.8)
+                shapefile_reproj.plot(ax=ax, facecolor='none', edgecolor='k', linewidth=1)
                 
                 # Add boundary to legend
-                legend_elements.append(Patch(facecolor='black', label='Study Area Boundary'))
+                legend_elements.append(Patch(facecolor='none', edgecolor='black', label='Study Area Boundary'))
                 
             except Exception as e:
                 print(f"Warning: Could not overlay shapefile on drainage plot: {e}")
-                import traceback
-                traceback.print_exc()
         
+        ax.tick_params(axis='x', rotation=45)
         plt.legend(handles=legend_elements, loc='upper right')
         figures['drainage'] = fig
         
@@ -1242,6 +1211,8 @@ class DEMVisualizer:
         self.hillshade = None
         self.slope = None
         self.aspect = None
+        self.transform = None
+        self.crs = None
         
         if self.dem_path.exists():
             self._load_dem_data()
@@ -1250,6 +1221,8 @@ class DEMVisualizer:
         """Load DEM data and calculate basic statistics."""
         with rasterio.open(self.dem_path) as src:
             self.dem_data = src.read(1).astype(float)
+            self.transform = src.transform
+            self.crs = src.crs
             # Handle nodata values
             if src.nodata is not None:
                 self.dem_data[self.dem_data == src.nodata] = np.nan
@@ -1354,52 +1327,60 @@ class DEMVisualizer:
         if self.hillshade is None:
             self.calculate_terrain_derivatives()
         
+        # Get georeferenced extent for plotting
+        with rasterio.open(self.dem_path) as src:
+            extent = rasterio.plot.plotting_extent(src)
+            
+        # Get CRS for axis labels
+        try:
+            crs_name = self.crs.name
+            xlabel = f"Easting ({crs_name})"
+            ylabel = f"Northing ({crs_name})"
+        except Exception:
+            xlabel = "Longitude"
+            ylabel = "Latitude"
+
         # Create visualization
-        fig, axes = plt.subplots(2, 2, figsize=figsize)
+        fig, axes = plt.subplots(2, 2, figsize=figsize, sharex=True, sharey=True)
         
         # DEM Hillshade
         ax = axes[0, 0]
-        im1 = ax.imshow(self.hillshade, cmap='gray', alpha=0.8)
+        ax.imshow(self.hillshade, cmap='gray', alpha=0.8, extent=extent)
         ax.set_title('DEM Hillshade')
-        ax.set_xlabel('Pixels East')
-        ax.set_ylabel('Pixels North')
+        ax.set_ylabel(ylabel)
         ax.grid(True, alpha=0.3)
-        
-        # Add shapefile overlay on hillshade
-        self._add_shapefile_to_plot(ax)
         
         # Elevation
         ax = axes[0, 1]
-        im2 = ax.imshow(self.dem_data, cmap='terrain')
+        im2 = ax.imshow(self.dem_data, cmap='terrain', extent=extent)
         ax.set_title(f'Elevation ({self.dem_stats["min_elevation"]:.0f} - {self.dem_stats["max_elevation"]:.0f} m)')
         plt.colorbar(im2, ax=ax, label='Elevation (m)')
         ax.grid(True, alpha=0.3)
         
-        # Add shapefile overlay on elevation
-        self._add_shapefile_to_plot(ax)
-        
         # Slope
         ax = axes[1, 0]
-        im3 = ax.imshow(self.slope, cmap='YlOrRd', vmax=np.nanpercentile(self.slope, 95))
+        im3 = ax.imshow(self.slope, cmap='YlOrRd', vmax=np.nanpercentile(self.slope, 95), extent=extent)
         ax.set_title('Slope')
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
         plt.colorbar(im3, ax=ax, label='Slope')
         ax.grid(True, alpha=0.3)
         
-        # Add shapefile overlay on slope
-        self._add_shapefile_to_plot(ax)
-        
         # Aspect
         ax = axes[1, 1]
-        im4 = ax.imshow(self.aspect, cmap='hsv')
+        ax.imshow(self.aspect, cmap='hsv', extent=extent)
         ax.set_title('Aspect')
-        plt.colorbar(im4, ax=ax, label='Aspect')
+        ax.set_xlabel(xlabel)
+        plt.colorbar(ax.images[0], ax=ax, label='Aspect')
         ax.grid(True, alpha=0.3)
         
-        # Add shapefile overlay on aspect
-        self._add_shapefile_to_plot(ax)
+        # Add shapefile overlay to all plots
+        for ax in axes.flat:
+            self._add_shapefile_to_plot(ax)
+            ax.tick_params(axis='x', rotation=45)
         
         plt.suptitle('DEM Analysis', fontsize=16, fontweight='bold')
-        plt.tight_layout()
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         
         return fig
     
@@ -1417,7 +1398,76 @@ class DEMVisualizer:
             else:
                 print(f"  {key}: {value}")
     
-    def visualize_dem(self, show_plot: bool = True, save_path: Optional[Path] = None) -> Optional[plt.Figure]:
+    def save_individual_dem_plots(self, output_dir: Path):
+        """
+        Saves individual plots for hillshade, elevation, slope, and aspect.
+        
+        Parameters
+        ----------
+        output_dir : Path
+            Directory to save the individual plots.
+        """
+        if self.dem_data is None:
+            raise ValueError("DEM data not loaded")
+
+        if self.hillshade is None:
+            self.calculate_terrain_derivatives()
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Get extent and labels for plotting
+        with rasterio.open(self.dem_path) as src:
+            extent = rasterio.plot.plotting_extent(src)
+        
+        try:
+            crs_name = self.crs.name
+            xlabel = f"Easting ({crs_name})"
+            ylabel = f"Northing ({crs_name})"
+        except Exception:
+            xlabel = "Longitude"
+            ylabel = "Latitude"
+
+        plot_configs = {
+            'dem_hillshade.png': {
+                'data': self.hillshade, 'cmap': 'gray', 'title': 'DEM Hillshade', 
+                'clabel': None, 'vmax': None
+            },
+            'dem_elevation.png': {
+                'data': self.dem_data, 'cmap': 'terrain', 'title': f'Elevation ({self.dem_stats["min_elevation"]:.0f} - {self.dem_stats["max_elevation"]:.0f} m)',
+                'clabel': 'Elevation (m)', 'vmax': None
+            },
+            'dem_slope.png': {
+                'data': self.slope, 'cmap': 'YlOrRd', 'title': 'Slope',
+                'clabel': 'Slope', 'vmax': np.nanpercentile(self.slope, 95)
+            },
+            'dem_aspect.png': {
+                'data': self.aspect, 'cmap': 'hsv', 'title': 'Aspect',
+                'clabel': 'Aspect', 'vmax': None
+            }
+        }
+
+        for filename, config in plot_configs.items():
+            fig, ax = plt.subplots(figsize=(12, 10))
+            im = ax.imshow(config['data'], cmap=config['cmap'], extent=extent, vmax=config['vmax'])
+            
+            ax.set_title(config['title'], fontsize=16, fontweight='bold')
+            ax.set_xlabel(xlabel)
+            ax.set_ylabel(ylabel)
+            ax.grid(True, linestyle='--', alpha=0.6)
+            ax.tick_params(axis='x', rotation=45)
+            
+            if config['clabel']:
+                plt.colorbar(im, ax=ax, label=config['clabel'], shrink=0.8)
+            
+            self._add_shapefile_to_plot(ax)
+            
+            plt.tight_layout()
+            save_path = output_dir / filename
+            fig.savefig(save_path, dpi=300, bbox_inches='tight')
+            plt.close(fig)
+            print(f"✅ Saved individual plot: {save_path}")
+
+    def visualize_dem(self, show_plot: bool = True, save_path: Optional[Path] = None, save_individual: bool = False) -> Optional[plt.Figure]:
         """
         Complete DEM visualization workflow.
         
@@ -1427,6 +1477,8 @@ class DEMVisualizer:
             Whether to display the plot
         save_path : Path, optional
             Path to save the figure
+        save_individual : bool
+            Whether to save individual plots for each DEM component.
             
         Returns
         -------
@@ -1450,6 +1502,9 @@ class DEMVisualizer:
             if save_path:
                 fig.savefig(save_path, dpi=300, bbox_inches='tight')
                 print(f"✅ DEM analysis plot saved to {save_path}")
+
+            if save_individual and save_path:
+                self.save_individual_dem_plots(save_path.parent)
             
             print(f"\n✅ DEM visualization complete!")
             print(f"DEM file saved at: {self.dem_path}")
@@ -1482,74 +1537,25 @@ class DEMVisualizer:
             # Read the shapefile/geopackage
             gdf = gpd.read_file(shapefile_path)
             
-            # Transform coordinates to pixel space if needed
-            # Assuming the shapefile bounds roughly match the DEM bounds
-            # You may need to adjust this transformation based on your specific data
-            
-            # Get shapefile bounds
-            shapefile_bounds = gdf.total_bounds
-            
-            # Get DEM dimensions
-            dem_height, dem_width = self.dem_data.shape
-            
-            # Transform shapefile coordinates to pixel coordinates
-            # Simple linear transformation (may need adjustment based on actual coordinate systems)
-            if hasattr(self, 'transform') and self.transform:
-                # Use rasterio transform if available
-                x_pixels = []
-                y_pixels = []
-                
-                for geom in gdf.geometry:
-                    if geom.geom_type == 'Polygon':
-                        coords = list(geom.exterior.coords)
-                    elif geom.geom_type == 'MultiPolygon':
-                        coords = []
-                        for poly in geom.geoms:
-                            coords.extend(list(poly.exterior.coords))
-                    else:
-                        continue
-                        
-                    for x, y in coords:
-                        # Transform geographic coordinates to pixel coordinates
-                        col = int((x - self.transform.c) / self.transform.a)
-                        row = int((y - self.transform.f) / self.transform.e)
-                        x_pixels.append(col)
-                        y_pixels.append(dem_height - row)  # Flip Y for image coordinates
-                
-                # Plot the shapefile boundary
-                if x_pixels and y_pixels:
-                    ax.plot(x_pixels, y_pixels, color='black', linewidth=2, label='Study Area Boundary')
-                    
+            # Reproject shapefile to match DEM's CRS
+            if self.crs:
+                gdf_reproj = gdf.to_crs(self.crs)
             else:
-                # Fallback: simple scaling based on bounds
-                x_scale = dem_width / (shapefile_bounds[2] - shapefile_bounds[0])
-                y_scale = dem_height / (shapefile_bounds[3] - shapefile_bounds[1])
-                
-                # Track if we've added any boundaries for legend purposes
-                boundary_added = False
-                
-                for geom in gdf.geometry:
-                    if geom.geom_type == 'Polygon':
-                        coords = list(geom.exterior.coords)
-                    elif geom.geom_type == 'MultiPolygon':
-                        coords = []
-                        for poly in geom.geoms:
-                            coords.extend(list(poly.exterior.coords))
-                    else:
-                        continue
-                    
-                    # Transform coordinates to pixel space
-                    x_pixels = [(x - shapefile_bounds[0]) * x_scale for x, _ in coords]
-                    y_pixels = [dem_height - (y - shapefile_bounds[1]) * y_scale for _, y in coords]
-                    
-                    # Only add label to the first boundary for legend
-                    label = 'Study Area Boundary' if not boundary_added else None
-                    ax.plot(x_pixels, y_pixels, color='black', linewidth=2, alpha=0.8, label=label)
-                    boundary_added = True
-                    
-            # Only show legend if we actually added boundaries
-            if boundary_added:
-                ax.legend(loc='upper right', fontsize=8)
+                gdf_reproj = gdf
+
+            # Plot the shapefile boundary
+            gdf_reproj.plot(ax=ax, facecolor='none', edgecolor='black', linewidth=2, label='Study Area Boundary')
+            
+            # Manually handle legend to avoid duplicates
+            handles, labels = ax.get_legend_handles_labels()
+            if "Study Area Boundary" in labels:
+                unique_labels = {}
+                for h, l in zip(handles, labels):
+                    if l not in unique_labels:
+                        unique_labels[l] = h
+                if unique_labels:
+                     ax.legend(unique_labels.values(), unique_labels.keys(), loc='upper right', fontsize=8)
+
             logger.info("Shapefile overlay added to plot")
             
         except Exception as e:
@@ -1559,7 +1565,8 @@ class DEMVisualizer:
 
 def create_dem_visualization(dem_path: Union[str, Path], 
                            show_plot: bool = True,
-                           save_path: Optional[Path] = None) -> Optional[plt.Figure]:
+                           save_path: Optional[Path] = None,
+                           save_individual: bool = False) -> Optional[plt.Figure]:
     """
     Convenience function to create DEM visualization.
     
@@ -1571,6 +1578,8 @@ def create_dem_visualization(dem_path: Union[str, Path],
         Whether to display the plot
     save_path : Path, optional
         Path to save the figure
+    save_individual : bool
+        Whether to save individual plots for each DEM component.
         
     Returns
     -------
@@ -1578,7 +1587,7 @@ def create_dem_visualization(dem_path: Union[str, Path],
         DEM analysis figure if successful
     """
     visualizer = DEMVisualizer(dem_path)
-    return visualizer.visualize_dem(show_plot=show_plot, save_path=save_path)
+    return visualizer.visualize_dem(show_plot=show_plot, save_path=save_path, save_individual=save_individual)
 
 
 class StudyAreaVisualizer:
@@ -2038,7 +2047,3 @@ class StudyAreaVisualizer:
         print(f"   Bounding box: {self.study_bounds[0]:.2f}°E to {self.study_bounds[2]:.2f}°E, {self.study_bounds[1]:.2f}°N to {self.study_bounds[3]:.2f}°N")
         
         return results
-
-
-if __name__ == "__main__":
-    print("Visualization module loaded successfully")
