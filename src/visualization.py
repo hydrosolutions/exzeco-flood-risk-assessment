@@ -1443,13 +1443,14 @@ class DEMVisualizer:
             print("❌ DEM statistics not available")
             return
         
-        print(f"DEM file confirmed at: {self.dem_path}")
-        print("\nDEM Statistics:")
-        for key, value in self.dem_stats.items():
-            if isinstance(value, float):
-                print(f"  {key}: {value:.2f}")
-            else:
-                print(f"  {key}: {value}")
+        # Statistics printing disabled to reduce console output
+        # print(f"DEM file confirmed at: {self.dem_path}")
+        # print("\nDEM Statistics:")
+        # for key, value in self.dem_stats.items():
+        #     if isinstance(value, float):
+        #         print(f"  {key}: {value:.2f}")
+        #     else:
+        #         print(f"  {key}: {value}")
     
     def save_individual_dem_plots(self, output_dir: Path):
         """

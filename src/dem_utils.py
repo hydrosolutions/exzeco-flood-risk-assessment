@@ -37,7 +37,7 @@ import zipfile
 import shutil
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
@@ -547,7 +547,8 @@ class DEMDownloader:
                                    bounds: Tuple[float, float, float, float],
                                    cache_dir: Union[str, Path],
                                    output_filename: str = "study_area_dem.tif",
-                                   product: str = 'SRTM3') -> Tuple[Path, dict]:
+                                   product: str = 'SRTM3',
+                                   shapefile_path: Optional[Union[str, Path]] = None) -> Tuple[Path, dict]:
         """
         Download DEM using elevation package with fallback to synthetic DEM.
         
@@ -565,6 +566,8 @@ class DEMDownloader:
             Output filename for the DEM
         product : str
             Elevation product to use ('SRTM1', 'SRTM3')
+        shapefile_path : str or Path, optional
+            Path to shapefile to use for naming the DEM file
             
         Returns
         -------
@@ -581,7 +584,39 @@ class DEMDownloader:
         # Setup paths
         cache_dir = Path(cache_dir)
         cache_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Generate DEM filename from shapefile name if provided
+        if shapefile_path is not None:
+            shapefile_path = Path(shapefile_path)
+            shapefile_stem = shapefile_path.stem
+            # Remove any suffix like '_wgs84' from the transformed shapefiles
+            if shapefile_stem.endswith('_wgs84'):
+                shapefile_stem = shapefile_stem[:-6]  # Remove '_wgs84' suffix
+            # Clean up any other common suffixes
+            for suffix in ['_wgs84', '_4326', '_reprojected']:
+                if shapefile_stem.endswith(suffix):
+                    shapefile_stem = shapefile_stem[:shapefile_stem.rfind(suffix)]
+                    break
+            output_filename = f"{shapefile_stem}_dem.tif"
+            logger.info(f"Using shapefile-based filename: {output_filename}")
+            logger.info(f"  Derived from shapefile: {shapefile_path.name}")
+        
         dem_path = cache_dir / output_filename
+        
+        # Check if DEM already exists
+        if dem_path.exists():
+            logger.info(f"✅ Found existing DEM file: {dem_path}")
+            logger.info("Skipping download and using cached DEM...")
+            
+            # Verify the file is valid and get basic statistics
+            try:
+                dem_stats = self.get_dem_stats(dem_path)
+                        
+                return dem_path, dem_stats
+            except Exception as e:
+                logger.warning(f"Existing DEM file appears corrupted: {e}")
+                logger.info("Proceeding with fresh download...")
+                # Continue to download section
         
         logger.info("Downloading DEM using elevation package...")
         logger.info(f"Study area bounds: {bounds}")
@@ -663,15 +698,7 @@ class DEMDownloader:
         
         # Verify the file exists and get basic statistics
         if dem_path.exists():
-            logger.info(f"DEM file confirmed at: {dem_path}")
             dem_stats = self.get_dem_stats(dem_path)
-            
-            logger.info("\nDEM Statistics:")
-            for key, value in dem_stats.items():
-                if isinstance(value, float):
-                    logger.info(f"  {key}: {value:.2f}")
-                else:
-                    logger.info(f"  {key}: {value}")
                     
             return dem_path, dem_stats
         else:
