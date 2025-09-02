@@ -8,6 +8,7 @@ exzeco:
 study_area:
   # Option 1: Use shapefile (preferred if available)
   shapefile_path: "./data/doi/qmp_doi.gpkg"  # Path to shapefile/geopackage
+  # shapefile_path: "./data/doi/Zhabay_River_Basin.gpkg"  # Path to shapefile/geopackage
   
   # Option 2: Use bounding box (fallback)
   bounds: [74.3, 42.3, 74.9, 43.2]  # [minx, miny, maxx, maxy]

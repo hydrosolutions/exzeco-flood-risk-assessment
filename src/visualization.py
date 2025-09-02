@@ -401,7 +401,7 @@ class ExzecoVisualizer:
     
     def create_3d_visualization(self, noise_level: str = 'exzeco_100cm') -> go.Figure:
         """
-        Create 3D surface plot with EXZECO results.
+        Create 3D surface plot with EXZECO results using a hybrid colorscale.
         
         Parameters
         ----------
@@ -420,7 +420,7 @@ class ExzecoVisualizer:
         prob_map = data['probability_map']
         
         # Downsample for performance
-        step = max(1, min(self.dem_data.shape) // 100)
+        step = max(1, min(self.dem_data.shape) // 200) # Increased resolution
         dem_ds = self.dem_data[::step, ::step]
         prob_ds = prob_map[::step, ::step]
         
@@ -429,38 +429,89 @@ class ExzecoVisualizer:
         x = np.arange(nx) * step * self.resolution
         y = np.arange(ny) * step * self.resolution
         
-        # Create 3D surface plot
+        # Create a hybrid surface color map.
+        # We will map elevation to the range [0, 1] and probability to [1.1, 2.1].
+        # This allows us to use a single surfacecolor array and a custom colorscale.
+        
+        # Normalize elevation to [0, 1]
+        min_dem, max_dem = np.nanmin(dem_ds), np.nanmax(dem_ds)
+        norm_dem = (dem_ds - min_dem) / (max_dem - min_dem)
+        
+        # Shift probability to [1.1, 2.1]
+        prob_shifted = prob_ds + 1.1
+        
+        # Create the final surfacecolor array
+        flood_threshold = 0.1
+        surface_color_data = np.where(prob_ds > flood_threshold, prob_shifted, norm_dem)
+
+        # Create a custom partitioned colorscale
+        # First half (0.0 to 0.5) for terrain, second half (0.5 to 1.0) for floods
+        from plotly.colors import sample_colorscale
+        
+        terrain_colors = sample_colorscale('earth', np.linspace(0, 1, 10))
+        flood_colors = sample_colorscale('Reds', np.linspace(0, 1, 10))
+        
+        custom_colorscale = []
+        # Terrain part (maps from 0.0 to 0.5 on the colorscale)
+        for i, color in enumerate(terrain_colors):
+            custom_colorscale.append([i / (2 * (len(terrain_colors)-1)), color])
+        
+        # Flood part (maps from 0.5 to 1.0 on the colorscale)
+        for i, color in enumerate(flood_colors):
+            custom_colorscale.append([0.5 + i / (2 * (len(flood_colors)-1)), color])
+
+        # Create the 3D surface plot
         fig = go.Figure()
         
-        # Add DEM surface
         fig.add_trace(go.Surface(
             x=x, y=y, z=dem_ds,
-            colorscale='earth',
-            showscale=False,
-            name='Terrain',
-            opacity=0.9,
-            contours={
-                "z": {"show": True, "start": dem_ds.min(), "end": dem_ds.max(), 
-                      "size": 50, "color": "white", "width": 1}
-            }
+            surfacecolor=surface_color_data,
+            cmin=0, 
+            cmax=2.1, # The max value of our combined color data
+            colorscale=custom_colorscale,
+            showscale=False, # Hide the main, confusing colorbar
+            name='Terrain & Flood Risk',
+            hoverinfo='text',
+            hovertext=[[f'Elev: {z:.1f}m<br>Prob: {p:.1%}' for z, p in zip(z_row, p_row)] 
+                       for z_row, p_row in zip(dem_ds, prob_ds)]
         ))
+
+        # --- Add separate, clear color bars for legend ---
         
-        # Add flood risk overlay
-        flood_surface = np.where(prob_ds > 0.5, dem_ds + 5, np.nan)
-        
-        fig.add_trace(go.Surface(
-            x=x, y=y, z=flood_surface,
-            colorscale=[[0, 'blue'], [0.5, 'cyan'], [1, 'red']],
-            showscale=True,
-            name='Flood Risk',
-            opacity=0.7,
-            colorbar=dict(
-                title="Flood<br>Probability",
-                x=1.0,
-                xpad=20
-            )
+        # Invisible trace for the Elevation color bar
+        fig.add_trace(go.Scatter3d(
+            x=[None], y=[None], z=[None], mode='markers',
+            marker=dict(
+                colorscale='earth', cmin=min_dem, cmax=max_dem,
+                showscale=True,
+                colorbar=dict(
+                    title="Elevation (m)",
+                    x=1.0, y=0.7, len=0.6,
+                    thickness=15,
+                    tickfont=dict(size=10)
+                )
+            ),
+            hoverinfo='none'
         ))
-        
+
+        # Invisible trace for the Flood Probability color bar
+        fig.add_trace(go.Scatter3d(
+            x=[None], y=[None], z=[None], mode='markers',
+            marker=dict(
+                colorscale='Reds', cmin=flood_threshold, cmax=1.0,
+                showscale=True,
+                colorbar=dict(
+                    title="Flood Prob.",
+                    x=1.15, y=0.7, len=0.6,
+                    thickness=15,
+                    tickfont=dict(size=10),
+                    tickvals=[0.1, 0.5, 1.0],
+                    ticktext=['10%', '50%', '100%']
+                )
+            ),
+            hoverinfo='none'
+        ))
+
         # Update layout
         fig.update_layout(
             title=f'3D Flood Risk Visualization - {noise_level}',
@@ -468,14 +519,13 @@ class ExzecoVisualizer:
                 xaxis_title='Distance East (m)',
                 yaxis_title='Distance North (m)',
                 zaxis_title='Elevation (m)',
-                camera=dict(
-                    eye=dict(x=1.5, y=1.5, z=1.5)
-                ),
+                camera=dict(eye=dict(x=1.5, y=1.5, z=1.5)),
                 aspectmode='manual',
                 aspectratio=dict(x=1, y=1, z=0.3)
             ),
             height=700,
-            margin=dict(l=0, r=0, t=30, b=0)
+            margin=dict(l=0, r=0, t=40, b=0),
+            showlegend=False
         )
         
         return fig
@@ -1196,7 +1246,7 @@ class DEMVisualizer:
     Handles DEM analysis and visualization including hillshade, slope, and aspect calculations.
     """
     
-    def __init__(self, dem_path: Union[str, Path]):
+    def __init__(self, dem_path: Union[str, Path], shapefile_path: Optional[Union[str, Path]] = None):
         """
         Initialize DEM visualizer.
         
@@ -1204,8 +1254,11 @@ class DEMVisualizer:
         ----------
         dem_path : str or Path
             Path to the DEM file
+        shapefile_path : str or Path, optional
+            Path to the shapefile to overlay on DEM plots
         """
         self.dem_path = Path(dem_path)
+        self.shapefile_path = Path(shapefile_path) if shapefile_path else None
         self.dem_data = None
         self.dem_stats = None
         self.hillshade = None
@@ -1525,14 +1578,18 @@ class DEMVisualizer:
             Matplotlib axis to add the shapefile to
         """
         try:
-            # Path to the GeoPackage file
-            shapefile_path = Path("../data/doi/qmp_doi.gpkg")
-            if not shapefile_path.exists():
-                # Try relative path from current working directory
-                shapefile_path = Path("data/doi/qmp_doi.gpkg")
+            # Use provided shapefile path or default
+            if self.shapefile_path and self.shapefile_path.exists():
+                shapefile_path = self.shapefile_path
+            else:
+                # Default fallback path
+                shapefile_path = Path("../data/doi/qmp_doi.gpkg")
                 if not shapefile_path.exists():
-                    logger.warning(f"Shapefile not found: {shapefile_path}")
-                    return
+                    # Try relative path from current working directory
+                    shapefile_path = Path("data/doi/qmp_doi.gpkg")
+                    if not shapefile_path.exists():
+                        logger.warning(f"Shapefile not found: {shapefile_path}")
+                        return
             
             # Read the shapefile/geopackage
             gdf = gpd.read_file(shapefile_path)
@@ -1566,7 +1623,8 @@ class DEMVisualizer:
 def create_dem_visualization(dem_path: Union[str, Path], 
                            show_plot: bool = True,
                            save_path: Optional[Path] = None,
-                           save_individual: bool = False) -> Optional[plt.Figure]:
+                           save_individual: bool = False,
+                           shapefile_path: Optional[Union[str, Path]] = None) -> Optional[plt.Figure]:
     """
     Convenience function to create DEM visualization.
     
@@ -1580,13 +1638,15 @@ def create_dem_visualization(dem_path: Union[str, Path],
         Path to save the figure
     save_individual : bool
         Whether to save individual plots for each DEM component.
+    shapefile_path : str or Path, optional
+        Path to the shapefile to overlay on DEM plots
         
     Returns
     -------
     matplotlib.figure.Figure or None
         DEM analysis figure if successful
     """
-    visualizer = DEMVisualizer(dem_path)
+    visualizer = DEMVisualizer(dem_path, shapefile_path=shapefile_path)
     return visualizer.visualize_dem(show_plot=show_plot, save_path=save_path, save_individual=save_individual)
 
 

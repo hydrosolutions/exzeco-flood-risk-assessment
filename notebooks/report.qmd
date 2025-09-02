@@ -1,7 +1,7 @@
 ---
 title: "EXZECO Flood Risk Assessment: A Comprehensive Technical Report for the Ala Archa and Alamedin Catchments"
 author: "Dr. Tobias Siegfried, hydrosolutions.ch"
-date: "2025-08-17"
+date: "2025-09-02"
 format:
   html:
     toc: true
@@ -46,7 +46,11 @@ This report presents a comprehensive flood risk assessment for the Ala Archa and
 
 # Introduction and Background
 
-The Ala Archa and Alamedin river catchments, located in the Chuy Region of northern Kyrgyzstan, are vital water resources but also pose significant flood risks to the surrounding communities, including the capital city of Bishkek. The combination of steep mountainous terrain and a densely populated downstream plain creates a volatile environment where snowmelt and heavy rainfall can trigger devastating floods. This report details a flood risk assessment conducted using the EXZECO model, a state-of-the-art tool for simulating and analyzing flood events without the need for complex and data-intensive hydraulic models.
+<!-- TODO: Revise according to facts -->
+The Ala Archa and Alamedin river catchments, located in the Chuy Region of northern Kyrgyzstan, are vital water resources but also pose significant flood risks to the surrounding communities, including the capital city of Bishkek. The combination of steep mountainous terrain and a densely populated downstream plain creates a volatile environment where snowmelt and heavy rainfall can trigger devastating floods. 
+
+
+This report details a flood risk assessment conducted using the EXZECO model, a state-of-the-art tool for simulating and analyzing flood events without the need for complex and data-intensive hydraulic models.
 
 The primary objective of this assessment is to identify and map areas at risk of flooding, providing a foundational evidence base for the development of effective flood mitigation and management strategies. By simulating a range of scenarios, this study offers insights into the probability and potential extent of inundation, enabling a proactive approach to disaster risk reduction.
 
