@@ -10,7 +10,9 @@ def test_imports():
         'numpy', 'scipy', 'pandas', 'geopandas',
         'rasterio', 'xarray', 'rioxarray', 'shapely',
         'matplotlib', 'plotly', 'folium', 'joblib',
-        'numba', 'skimage', 'elevation', 'whitebox'
+        'numba', 'skimage'
+        # 'elevation' removed for Windows compatibility - manual DEM download used instead
+        # 'whitebox' removed for Windows compatibility - can have Unix subprocess dependencies
     ]
     
     failed = []

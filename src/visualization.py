@@ -6,6 +6,12 @@ Interactive Visualization Module for EXZECO Results
 This module provides interactive and static visualization tools for
 EXZECO flood risk assessment results.
 
+Windows Compatibility Notes:
+- Uses pathlib.Path for all file operations
+- Specifies encoding for text file operations  
+- Avoids Unix-specific dependencies
+- Uses cross-platform file handling
+
 Key Components:
 - ExzecoVisualizer: Main class for EXZECO analysis visualization
 - StudyAreaVisualizer: Specialized class for study area visualization
@@ -1351,8 +1357,9 @@ class StudyAreaVisualizer:
             if output_dir:
                 output_dir = Path(output_dir)
                 output_dir.mkdir(parents=True, exist_ok=True)
-                study_map.save(output_dir / 'study_area_map.html')
-                print(f"✅ Interactive study area map saved to {output_dir / 'study_area_map.html'}")
+                map_path = output_dir / 'study_area_map.html'
+                study_map.save(str(map_path))  # Convert Path to string for Windows compatibility
+                print(f"✅ Interactive study area map saved to {map_path}")
             
             return study_map
             

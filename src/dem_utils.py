@@ -6,6 +6,12 @@ DEM Download and Processing Utilities
 This module provides utilities for downloading and processing Digital Elevation Models
 from various sources including SRTM, Copernicus DEM, and OpenTopography.
 
+Windows Compatibility Notes:
+- Avoids elevation package which has Unix dependencies
+- Uses pathlib.Path for all file operations
+- Implements Windows-compatible download methods
+- Uses proper encoding for file operations
+
 Author: EXZECO Implementation
 Date: 2024
 License: MIT
@@ -25,8 +31,8 @@ import logging
 import hashlib
 import json
 from tqdm import tqdm
-import elevation
-import earthpy.spatial as es
+# import elevation  # Commented out for Windows compatibility - use manual DEM download instead
+# import earthpy.spatial as es  # Commented out for Windows compatibility - can cause subprocess issues
 import geopandas as gpd
 from shapely.geometry import box, Polygon
 import xarray as xr
@@ -169,16 +175,29 @@ class DEMDownloader:
         return output_path
     
     def _download_srtm_elevation(self, bounds: Tuple, output_path: Path):
-        """Download SRTM using elevation library."""
-        logger.info("Downloading SRTM tiles using elevation library...")
+        """
+        Download SRTM using manual approach (Windows compatible).
         
-        # Clean previous downloads
-        elevation.clean()
+        Note: This replaces the elevation library which has Unix dependencies.
+        For Windows users, it's recommended to manually download DEM files
+        and place them in the cache directory, or use the Copernicus source.
+        """
+        logger.warning("SRTM download via elevation library is not recommended on Windows.")
+        logger.warning("Please use 'copernicus' source or manually download DEM files.")
+        logger.warning("Falling back to Copernicus DEM download...")
         
-        # Download tiles
-        elevation.clip(bounds=bounds, output=str(output_path))
-        
-        logger.info(f"SRTM DEM saved to {output_path}")
+        # Fallback to Copernicus download as it's more Windows-compatible
+        try:
+            self._download_copernicus(bounds, output_path)
+            logger.info(f"Fallback DEM saved to {output_path}")
+        except Exception as e:
+            logger.error(f"Failed to download DEM: {e}")
+            logger.error("Please manually download a DEM file and place it in the cache directory.")
+            raise RuntimeError(
+                "DEM download failed. On Windows, please manually download DEM files "
+                "or use a pre-downloaded DEM. The elevation library has Unix dependencies "
+                "that may not work properly on Windows."
+            )
     
     def _download_copernicus(self, bounds: Tuple, output_path: Path):
         """Download Copernicus GLO-30 DEM tiles."""
@@ -508,8 +527,10 @@ class DEMDownloader:
         with rasterio.open(dem_path) as src:
             dem = src.read(1)
             
-        # Calculate hillshade using earthpy
-        hillshade = es.hillshade(dem, azimuth=azimuth, altitude=altitude)
+        # Calculate hillshade using matplotlib (Windows-compatible alternative to earthpy)
+        from matplotlib.colors import LightSource
+        ls = LightSource(azdeg=azimuth, altdeg=altitude)
+        hillshade = ls.hillshade(dem, vert_exag=1.0, dx=1.0, dy=1.0)
         
         return hillshade
     
@@ -549,11 +570,11 @@ class DEMDownloader:
                                    output_filename: str = "study_area_dem.tif",
                                    product: str = 'SRTM3') -> Tuple[Path, dict]:
         """
-        Download DEM using elevation package with fallback to synthetic DEM.
+        Windows-compatible DEM download with fallback to synthetic DEM.
         
-        This method mirrors the logic from the Jupyter notebook cell for downloading DEM
-        data. It first attempts to use the elevation package, and if that fails, creates
-        a synthetic DEM for testing purposes.
+        This method provides Windows-compatible DEM acquisition. It avoids the elevation
+        package which has Unix dependencies and instead provides clear instructions
+        for manual DEM download or creates synthetic test data.
         
         Parameters
         ----------
@@ -564,7 +585,7 @@ class DEMDownloader:
         output_filename : str
             Output filename for the DEM
         product : str
-            Elevation product to use ('SRTM1', 'SRTM3')
+            Elevation product to use (for compatibility, not used in manual mode)
             
         Returns
         -------
@@ -578,95 +599,130 @@ class DEMDownloader:
         from rasterio.transform import from_bounds
         from rasterio.crs import CRS
         
-        # Setup paths
+        # Setup paths using pathlib for cross-platform compatibility
         cache_dir = Path(cache_dir)
         cache_dir.mkdir(parents=True, exist_ok=True)
         dem_path = cache_dir / output_filename
         
-        logger.info("Downloading DEM using elevation package...")
+        logger.info("Windows-compatible DEM download mode")
         logger.info(f"Study area bounds: {bounds}")
         logger.info(f"Cache directory: {cache_dir}")
-        logger.info(f"Output path: {dem_path}")
+        logger.info(f"Expected DEM path: {dem_path}")
         
-        try:
-            # Change to cache directory to avoid path issues
-            original_dir = os.getcwd()
-            os.chdir(cache_dir)
-            
-            # Download DEM using elevation package with relative path
-            elevation.clip(
-                bounds=bounds,
-                output=output_filename,
-                product=product,
-                cache_dir="elevation_cache"
-            )
-            
-            # Move back to original directory
-            os.chdir(original_dir)
-            
-            # The file might be created in the elevation_cache subdirectory
-            elevation_dem_path = cache_dir / "elevation_cache" / product / output_filename
-            
-            if elevation_dem_path.exists():
-                # Copy to expected location
-                shutil.copy2(elevation_dem_path, dem_path)
-                logger.info(f"✅ DEM copied from {elevation_dem_path} to {dem_path}")
-            elif dem_path.exists():
-                logger.info(f"✅ DEM downloaded successfully: {dem_path}")
-            else:
-                raise FileNotFoundError("DEM file not found in expected locations")
-                
-        except Exception as e:
-            # Make sure to return to original directory
-            try:
-                os.chdir(original_dir)
-            except:
-                pass
-            
-            logger.warning(f"Elevation package failed: {e}")
-            logger.info("Trying manual approach with test data...")
-            
-            # Create a synthetic DEM for testing purposes
-            min_lon, min_lat, max_lon, max_lat = bounds
-            
-            # Create coordinate arrays
-            lons = np.linspace(min_lon, max_lon, 100)
-            lats = np.linspace(min_lat, max_lat, 100)
-            
-            # Create a synthetic elevation surface (simple gradient + noise)
-            X, Y = np.meshgrid(lons, lats)
-            elevation_data = (
-                500 + 200 * (X - min_lon) / (max_lon - min_lon) +  # East-west gradient
-                300 * (Y - min_lat) / (max_lat - min_lat) +        # North-south gradient
-                50 * np.random.random(X.shape)                     # Random noise
-            ).astype(np.float32)
-            
-            # Create GeoTIFF with proper georeference
-            transform = from_bounds(min_lon, min_lat, max_lon, max_lat, 
-                                  elevation_data.shape[1], elevation_data.shape[0])
-            
-            with rasterio.open(
-                dem_path,
-                'w',
-                driver='GTiff',
-                height=elevation_data.shape[0],
-                width=elevation_data.shape[1],
-                count=1,
-                dtype=elevation_data.dtype,
-                crs=CRS.from_epsg(4326),
-                transform=transform,
-                compress='deflate'
-            ) as dst:
-                dst.write(elevation_data, 1)
-            
-            logger.info(f"✅ Synthetic DEM created for testing: {dem_path}")
+        # Check if DEM already exists
+        if dem_path.exists():
+            logger.info(f"✅ Using existing DEM file: {dem_path}")
+            dem_stats = self.get_dem_stats(dem_path)
+            return dem_path, dem_stats
+        
+        # Look for any DEM files in the cache directory
+        dem_files = list(cache_dir.glob("*.tif")) + list(cache_dir.glob("*.tiff"))
+        if dem_files:
+            logger.info(f"Found existing DEM files: {[f.name for f in dem_files]}")
+            logger.info(f"Using first DEM file: {dem_files[0]}")
+            # Copy to expected location
+            shutil.copy2(dem_files[0], dem_path)
+            dem_stats = self.get_dem_stats(dem_path)
+            return dem_path, dem_stats
+        
+        logger.warning("⚠️ No DEM file found. Creating instructions for manual download...")
+        
+        # Create instructions for manual download
+        readme_path = cache_dir / "README_WINDOWS_DEM_DOWNLOAD.txt"
+        min_lon, min_lat, max_lon, max_lat = bounds
+        
+        with open(readme_path, 'w', encoding='utf-8') as f:
+            f.write(f"""Windows DEM Download Instructions
+====================================
+
+Study Area Bounds: {bounds}
+Expected DEM file: {dem_path}
+
+OPTION 1: Manual Download (Recommended)
+---------------------------------------
+1. Download a DEM file that covers your study area from:
+   - USGS EarthExplorer: https://earthexplorer.usgs.gov/
+   - OpenTopography: https://portal.opentopography.org/
+   - Copernicus DEM: https://spacedata.copernicus.eu/
+   
+2. Save the file as: {output_filename}
+3. Place it in this directory: {cache_dir}
+
+OPTION 2: Use Synthetic Test Data
+---------------------------------
+If you just want to test the analysis workflow, the system will
+create synthetic elevation data automatically.
+
+The DEM should cover the area:
+- Min Longitude: {min_lon}
+- Min Latitude: {min_lat}
+- Max Longitude: {max_lon}
+- Max Latitude: {max_lat}
+
+File format: GeoTIFF (.tif)
+""")
+        
+        logger.info(f"Created download instructions: {readme_path}")
+        
+        # Ask user what to do
+        logger.warning("❌ No DEM file found for analysis.")
+        logger.warning("Creating synthetic test DEM for demonstration purposes...")
+        logger.warning("For real analysis, please download actual DEM data!")
+        
+        # Create a synthetic DEM for testing purposes
+        logger.info("Creating synthetic elevation surface...")
+        
+        # Create coordinate arrays
+        lons = np.linspace(min_lon, max_lon, 200)  # Higher resolution
+        lats = np.linspace(min_lat, max_lat, 200)
+        
+        # Create a more realistic synthetic elevation surface
+        X, Y = np.meshgrid(lons, lats)
+        
+        # Create terrain with:
+        # - Base elevation
+        # - East-west gradient 
+        # - North-south gradient
+        # - Sine wave patterns for valleys/ridges
+        # - Random noise
+        elevation_data = (
+            800 +  # Base elevation
+            300 * (X - min_lon) / (max_lon - min_lon) +  # East-west gradient
+            200 * (Y - min_lat) / (max_lat - min_lat) +  # North-south gradient
+            100 * np.sin(5 * np.pi * (X - min_lon) / (max_lon - min_lon)) +  # Valley pattern
+            80 * np.sin(3 * np.pi * (Y - min_lat) / (max_lat - min_lat)) +   # Ridge pattern
+            30 * np.random.random(X.shape)  # Random noise
+        ).astype(np.float32)
+        
+        # Ensure positive elevations
+        elevation_data = np.maximum(elevation_data, 0)
+        
+        # Create GeoTIFF with proper georeference
+        transform = from_bounds(min_lon, min_lat, max_lon, max_lat, 
+                              elevation_data.shape[1], elevation_data.shape[0])
+        
+        with rasterio.open(
+            dem_path,
+            'w',
+            driver='GTiff',
+            height=elevation_data.shape[0],
+            width=elevation_data.shape[1],
+            count=1,
+            dtype=elevation_data.dtype,
+            crs=CRS.from_epsg(4326),
+            transform=transform,
+            compress='lzw'  # Better compression
+        ) as dst:
+            dst.write(elevation_data, 1)
+        
+        logger.info(f"✅ Synthetic test DEM created: {dem_path}")
+        logger.warning("⚠️ This is synthetic data for testing only!")
         
         # Verify the file exists and get basic statistics
         if dem_path.exists():
-            logger.info(f"DEM file confirmed at: {dem_path}")
             dem_stats = self.get_dem_stats(dem_path)
             
-            logger.info("\nDEM Statistics:")
+            logger.info("\nSynthetic DEM Statistics:")
             for key, value in dem_stats.items():
                 if isinstance(value, float):
                     logger.info(f"  {key}: {value:.2f}")
@@ -675,7 +731,7 @@ class DEMDownloader:
                     
             return dem_path, dem_stats
         else:
-            raise FileNotFoundError("❌ DEM file was not created successfully")
+            raise FileNotFoundError("❌ Failed to create DEM file")
 
     def get_dem_stats(self, dem_path: Union[str, Path]) -> dict:
         """

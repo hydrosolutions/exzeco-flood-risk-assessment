@@ -10,6 +10,12 @@ The method uses Monte Carlo simulation with DEM perturbation to identify
 potentially flooded areas by calculating flow accumulation paths multiple times
 with random terrain modifications.
 
+Windows Compatibility Notes:
+- Uses pathlib.Path for all file operations
+- Specifies encoding for text file operations
+- Avoids Unix-specific subprocess calls
+- Uses cross-platform parallel processing
+
 Author: EXZECO Implementation
 Date: 2024
 License: MIT
@@ -30,7 +36,15 @@ from typing import Tuple, Dict, List, Optional, Union
 from dataclasses import dataclass
 import warnings
 from tqdm import tqdm
-from joblib import Parallel, delayed
+# Import joblib with Windows-compatible backend
+try:
+    # Import Parallel and delayed for parallel execution and parallel_backend for context management
+    from joblib import Parallel, delayed, parallel_backend
+    import os
+except ImportError as e:
+    print(f"Warning: joblib import failed ({e}). Parallel processing will be disabled.")
+    Parallel = None
+    delayed = None
 import numba as nb
 from pathlib import Path
 import yaml
@@ -461,16 +475,34 @@ class ExzecoAnalysis:
         """
         logger.info(f"Running Monte Carlo for noise level {noise_level}m with {self.config.iterations} iterations")
         
-        # Parallel execution
-        if self.config.n_jobs != 1:
-            iterator = tqdm(range(self.config.iterations), desc=f"MC {noise_level}m") if progress_bar else range(self.config.iterations)
-            
-            results = Parallel(n_jobs=self.config.n_jobs)(
-                delayed(self._single_iteration)(noise_level) for _ in iterator
-            )
-            
-            # Aggregate results
-            probability_map = np.mean(results, axis=0)
+        # Parallel execution with Windows compatibility
+        if self.config.n_jobs != 1 and Parallel is not None:
+            try:
+                iterator = tqdm(range(self.config.iterations), desc=f"MC {noise_level}m") if progress_bar else range(self.config.iterations)
+                
+                # Use threading backend on Windows to avoid subprocess issues
+                if os.name == 'nt':  # Windows
+                    from joblib import parallel_backend
+                    with parallel_backend('threading', n_jobs=self.config.n_jobs):
+                        results = Parallel(n_jobs=self.config.n_jobs)(
+                            delayed(self._single_iteration)(noise_level) for _ in iterator
+                        )
+                else:
+                    results = Parallel(n_jobs=self.config.n_jobs)(
+                        delayed(self._single_iteration)(noise_level) for _ in iterator
+                    )
+                
+                # Aggregate results
+                probability_map = np.mean(results, axis=0)
+            except Exception as e:
+                logger.warning(f"Parallel execution failed ({e}), falling back to sequential")
+                # Fall back to sequential execution
+                probability_map = np.zeros(self.shape, dtype=np.float32)
+                iterator = tqdm(range(self.config.iterations), desc=f"MC {noise_level}m") if progress_bar else range(self.config.iterations)
+                for _ in iterator:
+                    mask = self._single_iteration(noise_level)
+                    probability_map += mask
+                probability_map /= self.config.iterations
         else:
             # Sequential execution
             probability_map = np.zeros(self.shape, dtype=np.float32)
@@ -614,7 +646,7 @@ class ExzecoAnalysis:
     
     def export_results(self, output_dir: Union[str, Path], format: str = 'geotiff') -> None:
         """
-        Export analysis results.
+        Export analysis results with Windows compatibility.
         
         Parameters
         ----------
@@ -623,6 +655,7 @@ class ExzecoAnalysis:
         format : str
             Export format ('geotiff', 'shapefile', 'geojson')
         """
+        # Use pathlib for cross-platform compatibility
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         
@@ -632,11 +665,11 @@ class ExzecoAnalysis:
             prob_map = data['probability_map']
             
             if format == 'geotiff':
-                # Export as GeoTIFF
+                # Export as GeoTIFF with cross-platform path handling
                 output_path = output_dir / f"{name}.tif"
                 
                 with rasterio.open(
-                    output_path,
+                    str(output_path),  # Convert Path to string for rasterio compatibility
                     'w',
                     driver='GTiff',
                     height=prob_map.shape[0],
@@ -650,7 +683,7 @@ class ExzecoAnalysis:
                     dst.write(prob_map, 1)
                     
             elif format in ['shapefile', 'geojson']:
-                # Vectorize and export
+                # Vectorize and export with proper path handling
                 shapes = features.shapes(
                     (prob_map > 0.5).astype(np.uint8),
                     transform=self.transform
@@ -671,13 +704,13 @@ class ExzecoAnalysis:
                     crs=self.crs
                 )
                 
-                # Export
+                # Export with cross-platform path handling
                 if format == 'shapefile':
                     output_path = output_dir / f"{name}.shp"
-                    gdf.to_file(output_path)
+                    gdf.to_file(str(output_path))  # Convert Path to string
                 else:  # geojson
                     output_path = output_dir / f"{name}.geojson"
-                    gdf.to_file(output_path, driver='GeoJSON')
+                    gdf.to_file(str(output_path), driver='GeoJSON')  # Convert Path to string
             
             logger.info(f"Exported {name} to {output_path}")
     
@@ -718,7 +751,7 @@ class ExzecoAnalysis:
 
 def load_config(config_path: Union[str, Path]) -> ExzecoConfig:
     """
-    Load configuration from YAML file.
+    Load configuration from YAML file with Windows compatibility.
     
     Parameters
     ----------
@@ -730,9 +763,24 @@ def load_config(config_path: Union[str, Path]) -> ExzecoConfig:
     ExzecoConfig
         Configuration object
     """
-    with open(config_path, 'r') as f:
-        config_dict = yaml.safe_load(f)
+    # Use pathlib for cross-platform compatibility
+    config_path = Path(config_path)
     
+    if not config_path.exists():
+        raise FileNotFoundError(f"Configuration file not found: {config_path}")
+    
+    try:
+        # Specify encoding for Windows compatibility
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config_dict = yaml.safe_load(f)
+    except yaml.YAMLError as e:
+        raise ValueError(f"Error parsing YAML configuration file: {e}")
+    except Exception as e:
+        raise IOError(f"Error reading configuration file: {e}")
+    
+    if not isinstance(config_dict, dict):
+        raise ValueError("Configuration file must contain a YAML dictionary")
+        
     exzeco_params = config_dict.get('exzeco', {})
     processing_params = config_dict.get('processing', {})
     

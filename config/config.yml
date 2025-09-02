@@ -1,9 +1,9 @@
 # EXZECO Configuration
 exzeco:
-  noise_levels: [0.2, 0.4, 0.6, 0.8, 1.0]  # meters
-  iterations: 100  # Monte Carlo iterations
-  min_drainage_area: 0.001  # km² (reduced from 0.01 to capture more flow paths)
-  drainage_classes: [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5]  # km²
+  noise_levels: [0.5, 1.0, 1.5, 2.0, 3.0]  # meters
+  iterations: 150  # Monte Carlo iterations
+  min_drainage_area: 0.1  # km² (reduced from 0.01 to capture more flow paths)
+  drainage_classes: [0.1, 0.5, 1.0, 5.0, 10.0, 50.0, 100.0, 500.0] #[0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5]  # km²
 
 dem:
   resolution: 30  # meters (for SRTM/Copernicus DEM)
@@ -12,10 +12,10 @@ dem:
 
 processing:
   n_jobs: -1  # Use all available cores
-  chunk_size: 1000  # pixels per chunk
+  chunk_size: 500  # pixels per chunk
   use_gpu: false  # Set to true if CUDA available
 
 visualization:
-  cmap: "Blues"
+  cmap: "terrain"
   interactive: true
   export_format: ["html", "png", "geojson"]
