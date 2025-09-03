@@ -753,8 +753,8 @@ class ExzecoVisualizer:
             dashboard
         ])
     
-    def plot_statistics(self, noise_level: str):
-        """Plot statistical analysis."""
+    def plot_statistics(self, noise_level: str, config=None, save_files: bool = False, output_dir: Optional[Path] = None):
+        """Plot statistical analysis with config information and file saving capabilities."""
         data = self.results[noise_level]
         prob_map = data['probability_map']
         
@@ -839,12 +839,24 @@ class ExzecoVisualizer:
         # Summary statistics
         ax = axes[1, 1]
         ax.axis('off')
+        
+        # Build configuration info if available - make it more prominent in the main table
+        config_section = ""
+        if config:
+            config_section = f"""
+        Configuration Parameters:
+        Iterations: {config.iterations:,}
+        Drainage Threshold: {config.min_drainage_area} km²
+        
+        """
+        
         stats_text = f"""
         Summary Statistics - {noise_level}
-        {'='*40}
+        {'='*40}{config_section}Statistical Results:
         Total Pixels: {prob_map.size:,}
         Flood Pixels: {np.sum(prob_map > 0.5):,}
         
+        Probability Statistics:
         Mean Probability: {np.nanmean(prob_map):.3f}
         Median Probability: {np.nanmedian(prob_map):.3f}
         Max Probability: {np.nanmax(prob_map):.3f}
@@ -860,7 +872,167 @@ class ExzecoVisualizer:
         
         plt.suptitle(f'Statistical Analysis - {noise_level}', fontsize=14, fontweight='bold')
         plt.tight_layout()
+        
+        # Save files if requested
+        if save_files and output_dir:
+            output_dir = Path(output_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Extract noise level for filename
+            noise_str = noise_level.replace('exzeco_', '').replace('cm', 'cm')
+            
+            # Build descriptive filename with config info
+            if config:
+                filename_base = f"statistics_{noise_str}_{config.iterations}iter_{str(config.min_drainage_area).replace('.', 'p')}km2"
+            else:
+                filename_base = f"statistics_{noise_str}"
+            
+            # Save as PNG
+            png_path = output_dir / f"{filename_base}.png"
+            plt.savefig(png_path, dpi=300, bbox_inches='tight')
+            print(f"✅ Statistics plot saved as PNG: {png_path}")
+            
+            # Save as SVG
+            svg_path = output_dir / f"{filename_base}.svg"
+            plt.savefig(svg_path, format='svg', bbox_inches='tight')
+            print(f"✅ Statistics plot saved as SVG: {svg_path}")
+            
+            # Create HTML version using Plotly for interactivity
+            try:
+                import plotly.graph_objects as go
+                from plotly.subplots import make_subplots
+                import plotly.offline as pyo
+                
+                # Create interactive version with Plotly
+                plotly_fig = self._create_plotly_statistics(noise_level, prob_map, config)
+                
+                # Save as HTML
+                html_path = output_dir / f"{filename_base}.html"
+                pyo.plot(plotly_fig, filename=str(html_path), auto_open=False)
+                print(f"✅ Interactive statistics saved as HTML: {html_path}")
+                
+            except ImportError:
+                print("⚠️  Plotly not available - HTML export skipped")
+            except Exception as e:
+                print(f"⚠️  Error creating HTML version: {e}")
+        
         plt.show()
+    
+    def _create_plotly_statistics(self, noise_level: str, prob_map: np.ndarray, config=None):
+        """Create interactive Plotly version of statistics plots."""
+        import plotly.graph_objects as go
+        from plotly.subplots import make_subplots
+        
+        # Create subplot figure
+        fig = make_subplots(
+            rows=2, cols=2,
+            subplot_titles=['Probability Distribution', 'Cumulative Distribution', 
+                          'Risk Category Distribution', 'Summary Statistics'],
+            specs=[[{"type": "histogram"}, {"type": "scatter"}],
+                   [{"type": "pie"}, {"type": "table"}]]
+        )
+        
+        # Check if we have any meaningful flood probabilities
+        has_floods = np.any(prob_map > 0.01)
+        
+        # Probability distribution
+        if has_floods:
+            flood_probs = prob_map[prob_map > 0.01].flatten()
+        else:
+            flood_probs = prob_map.flatten()
+        
+        fig.add_trace(
+            go.Histogram(x=flood_probs, nbinsx=50, name="Probability Distribution"),
+            row=1, col=1
+        )
+        
+        # Cumulative distribution
+        if has_floods and len(flood_probs) > 0:
+            sorted_probs = np.sort(flood_probs)
+            cumulative = np.arange(1, len(sorted_probs) + 1) / len(sorted_probs)
+            fig.add_trace(
+                go.Scatter(x=sorted_probs, y=cumulative, mode='lines', name="Cumulative Distribution"),
+                row=1, col=2
+            )
+        
+        # Risk categories pie chart
+        categories = ['Very Low (<0.2)', 'Low (0.2-0.4)', 'Medium (0.4-0.6)', 
+                     'High (0.6-0.8)', 'Very High (>0.8)']
+        counts = [
+            np.sum((prob_map > 0.01) & (prob_map < 0.2)),
+            np.sum((prob_map >= 0.2) & (prob_map < 0.4)),
+            np.sum((prob_map >= 0.4) & (prob_map < 0.6)),
+            np.sum((prob_map >= 0.6) & (prob_map < 0.8)),
+            np.sum(prob_map >= 0.8)
+        ]
+        colors = ['#c7e9b4', '#7fcdbb', '#41b6c4', '#2c7fb8', '#253494']
+        
+        # Filter out zero counts for pie chart
+        non_zero_counts = []
+        non_zero_categories = []
+        non_zero_colors = []
+        for i, (count, cat, color) in enumerate(zip(counts, categories, colors)):
+            if count > 0:
+                non_zero_counts.append(count)
+                non_zero_categories.append(cat)
+                non_zero_colors.append(color)
+        
+        if non_zero_counts:
+            fig.add_trace(
+                go.Pie(values=non_zero_counts, labels=non_zero_categories, 
+                      marker=dict(colors=non_zero_colors), name="Risk Categories"),
+                row=2, col=1
+            )
+        
+        # Summary statistics table
+        config_data = []
+        if config:
+            config_data = [
+                ["=== Configuration ===", ""],
+                ["Iterations", f"{config.iterations:,}"],
+                ["Drainage Threshold", f"{config.min_drainage_area} km²"],
+                ["", ""],
+                ["=== Statistical Results ===", ""]
+            ]
+        else:
+            config_data = [["=== Statistical Results ===", ""]]
+        
+        stats_data = config_data + [
+            ["Total Pixels", f"{prob_map.size:,}"],
+            ["Flood Pixels", f"{np.sum(prob_map > 0.5):,}"],
+            ["", ""],
+            ["Probability Statistics:", ""],
+            ["Mean Probability", f"{np.nanmean(prob_map):.3f}"],
+            ["Median Probability", f"{np.nanmedian(prob_map):.3f}"],
+            ["Max Probability", f"{np.nanmax(prob_map):.3f}"],
+            ["Std Deviation", f"{np.nanstd(prob_map):.3f}"],
+            ["", ""],
+            ["Area Statistics:", ""],
+            ["Total Area", f"{prob_map.size * (self.resolution**2) / 1e6:.2f} km²"],
+            ["Flood Area", f"{np.sum(prob_map > 0.5) * (self.resolution**2) / 1e6:.2f} km²"],
+            ["High Risk Area", f"{np.sum(prob_map > 0.8) * (self.resolution**2) / 1e6:.2f} km²"]
+        ]
+        
+        fig.add_trace(
+            go.Table(
+                header=dict(values=["Metric", "Value"],
+                          fill_color="paleturquoise",
+                          align="left"),
+                cells=dict(values=list(zip(*stats_data)),
+                          fill_color="lavender",
+                          align="left")
+            ),
+            row=2, col=2
+        )
+        
+        # Update layout
+        fig.update_layout(
+            title=f'Statistical Analysis - {noise_level}',
+            showlegend=False,
+            height=800
+        )
+        
+        return fig
     
     def _probability_to_rgba(self, prob_map: np.ndarray) -> np.ndarray:
         """Convert probability map to RGBA image."""

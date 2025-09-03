@@ -10,7 +10,10 @@ fiona>=1.9.0
 pyproj>=3.6.0
 matplotlib>=3.7.0
 seaborn>=0.12.0
-plotly>=5.17.0
+# Plotly and Kaleido versions must be compatible for static image export
+# Plotly 6.3.0+ is required for Kaleido 1.0.0 compatibility
+plotly>=6.3.0
+narwhals>=2.3.0
 folium>=0.15.0
 jupyterlab>=4.0.0
 ipywidgets>=8.1.0
@@ -28,4 +31,10 @@ pystac-client>=0.7.0
 planetary-computer>=1.0.0
 stackstac>=0.5.0
 openpyxl>=3.1.0
-kaleido>=0.2.0
+# Kaleido 1.0.0+ is required for Plotly 6.3.0+ static image export compatibility
+kaleido>=1.0.0
+
+# Recreate env. from scratch...
+# conda create -n exzeco python=3.11
+# conda activate exzeco
+# pip install -r requirements.txt
