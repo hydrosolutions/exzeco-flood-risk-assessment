@@ -41,15 +41,20 @@ suppressPackageStartupMessages({
 })
 ```
 
+<!-- Background documents on Flood Risk
+- GEMINI 2.5: https://g.co/gemini/share/06215d9b5934 and Google Drive: https://docs.google.com/document/d/1NVQXgZjuiN3ku21tJuaXQ39ZVcJ67413qu25SouB76s/edit?usp=sharing
+- ChatGPT 5: https://chatgpt.com/share/e/68b7dd29-0dc0-8013-9a06-3188d80bc3ac
+ -->
+
+
 # Executive Summary
 
-This report presents a comprehensive flood risk assessment for the Ala Archa and Alamedin river catchments in Kyrgyzstan, utilizing the EXZECO (Extraction des Zones d’Écoulement) methodology. The study leverages a Digital Elevation Model (DEM) and Monte Carlo simulations to identify preferential flow paths and delineate areas susceptible to flooding. The results indicate significant flood risk, particularly in the downstream plains, and provide a robust, scientifically-grounded basis for informed decision-making in flood risk management and the prioritization of mitigation measures. The findings are presented through a series of maps, data tables, and visualizations, offering a detailed overview of the flood hazard landscape in the study area. This assessment serves as a critical tool for local authorities and stakeholders in developing effective strategies to enhance resilience against flood events.
+To come last
 
 # Introduction and Background
 
 <!-- TODO: Revise according to facts -->
 The Ala Archa and Alamedin river catchments, located in the Chuy Region of northern Kyrgyzstan, are vital water resources but also pose significant flood risks to the surrounding communities, including the capital city of Bishkek. The combination of steep mountainous terrain and a densely populated downstream plain creates a volatile environment where snowmelt and heavy rainfall can trigger devastating floods. 
-
 
 This report details a flood risk assessment conducted using the EXZECO model, a state-of-the-art tool for simulating and analyzing flood events without the need for complex and data-intensive hydraulic models.
 
