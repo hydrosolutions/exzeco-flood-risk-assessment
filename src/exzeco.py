@@ -797,7 +797,7 @@ class ExzecoAnalysis:
     
     def export_results(self, output_dir: Union[str, Path], format: str = 'geotiff') -> None:
         """
-        Export analysis results.
+        Export analysis results with descriptive naming.
         
         Parameters
         ----------
@@ -814,10 +814,17 @@ class ExzecoAnalysis:
         for name, data in self.results.items():
             prob_map = data['probability_map']
             
+            # Extract noise level from name (e.g., 'exzeco_200cm' -> '200cm')
+            noise_level_cm = name.split('_')[-1] if '_' in name else '0cm'
+            
+            # Create descriptive filename: exzeco_{noise_level}_{iterations}_{drainage_threshold}
+            drainage_threshold_str = str(self.config.min_drainage_area).replace('.', 'p')
+            descriptive_name = f"exzeco_{noise_level_cm}_{self.config.iterations}_{drainage_threshold_str}km2"
+            
             # Export total domain results
             if format == 'geotiff':
                 # Export as GeoTIFF
-                output_path = output_dir / f"{name}.tif"
+                output_path = output_dir / f"{descriptive_name}.tif"
                 
                 with rasterio.open(
                     output_path,
@@ -857,10 +864,10 @@ class ExzecoAnalysis:
                 
                 # Export
                 if format == 'shapefile':
-                    output_path = output_dir / f"{name}.shp"
+                    output_path = output_dir / f"{descriptive_name}.shp"
                     gdf.to_file(output_path)
                 else:  # geojson
-                    output_path = output_dir / f"{name}.geojson"
+                    output_path = output_dir / f"{descriptive_name}.geojson"
                     gdf.to_file(output_path, driver='GeoJSON')
             
             logger.info(f"Exported {name} to {output_path}")
@@ -878,8 +885,8 @@ class ExzecoAnalysis:
                     clean_name = clean_name.replace(' ', '_')
                     
                     if format == 'geotiff':
-                        # Export subcatchment raster
-                        subcatch_output_path = subcatch_dir / f"{name}_{clean_name}.tif"
+                        # Export subcatchment raster with descriptive naming
+                        subcatch_output_path = subcatch_dir / f"{descriptive_name}_{clean_name}.tif"
                         
                         with rasterio.open(
                             subcatch_output_path,
@@ -923,10 +930,10 @@ class ExzecoAnalysis:
                             
                             # Export
                             if format == 'shapefile':
-                                subcatch_output_path = subcatch_dir / f"{name}_{clean_name}.shp"
+                                subcatch_output_path = subcatch_dir / f"{descriptive_name}_{clean_name}.shp"
                                 subcatch_gdf.to_file(subcatch_output_path)
                             else:  # geojson
-                                subcatch_output_path = subcatch_dir / f"{name}_{clean_name}.geojson"
+                                subcatch_output_path = subcatch_dir / f"{descriptive_name}_{clean_name}.geojson"
                                 subcatch_gdf.to_file(subcatch_output_path, driver='GeoJSON')
                     
                     logger.info(f"Exported subcatchment {subcatch_name} to {subcatch_output_path}")

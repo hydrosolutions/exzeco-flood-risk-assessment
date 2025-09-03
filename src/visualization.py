@@ -1031,7 +1031,8 @@ class ExzecoVisualizer:
                                      figsize_drainage: Tuple[int, int] = (12, 8),
                                      shapefile_gdf=None,
                                      show_plots: bool = True,
-                                     save_paths: Optional[Dict] = None) -> Dict:
+                                     save_paths: Optional[Dict] = None,
+                                     save_tiff: bool = True) -> Dict:
         """
         Create spatial features analysis including endorheic basins and drainage classification.
         
@@ -1051,11 +1052,13 @@ class ExzecoVisualizer:
             Whether to display plots
         save_paths : dict, optional
             Paths to save figures
+        save_tiff : bool
+            Whether to save GeoTIFF files
             
         Returns
         -------
         dict
-            Dictionary of created figures
+            Dictionary of created figures and data
         """
         if results is None:
             results = self.results
@@ -1121,6 +1124,38 @@ class ExzecoVisualizer:
             if save_paths and 'endorheic' in save_paths:
                 plt.savefig(save_paths['endorheic'], dpi=300, bbox_inches='tight')
             
+            # Save endorheic basins as GeoTIFF
+            if save_tiff and save_paths and 'endorheic' in save_paths:
+                try:
+                    # Create GeoTIFF filename from PNG path
+                    tiff_path = Path(save_paths['endorheic']).with_suffix('.tif')
+                    
+                    # Convert boolean mask to integer
+                    endorheic_int = endorheic_mask.astype(np.uint8)
+                    
+                    with rasterio.open(
+                        tiff_path,
+                        'w',
+                        driver='GTiff',
+                        height=endorheic_int.shape[0],
+                        width=endorheic_int.shape[1],
+                        count=1,
+                        dtype=endorheic_int.dtype,
+                        crs=analyzer.crs,
+                        transform=analyzer.transform,
+                        compress='lzw',
+                        nodata=0
+                    ) as dst:
+                        dst.write(endorheic_int, 1)
+                        # Add description
+                        dst.update_tags(description='Endorheic basins detected by EXZECO analysis (1=endorheic, 0=exorheic)')
+                    
+                    print(f"✅ Endorheic basins GeoTIFF saved: {tiff_path}")
+                    figures['endorheic_tiff'] = tiff_path
+                    
+                except Exception as e:
+                    print(f"❌ Error saving endorheic basins GeoTIFF: {e}")
+            
             if show_plots:
                 plt.show()
             
@@ -1181,6 +1216,41 @@ class ExzecoVisualizer:
         if save_paths and 'drainage' in save_paths:
             plt.savefig(save_paths['drainage'], dpi=300, bbox_inches='tight')
         
+        # Save drainage classification as GeoTIFF
+        if save_tiff and save_paths and 'drainage' in save_paths:
+            try:
+                # Create GeoTIFF filename from PNG path
+                tiff_path = Path(save_paths['drainage']).with_suffix('.tif')
+                
+                # Ensure classified is the correct data type
+                classified_uint8 = classified.astype(np.uint8)
+                
+                with rasterio.open(
+                    tiff_path,
+                    'w',
+                    driver='GTiff',
+                    height=classified_uint8.shape[0],
+                    width=classified_uint8.shape[1],
+                    count=1,
+                    dtype=classified_uint8.dtype,
+                    crs=analyzer.crs,
+                    transform=analyzer.transform,
+                    compress='lzw',
+                    nodata=0
+                ) as dst:
+                    dst.write(classified_uint8, 1)
+                    # Add description and category information
+                    drainage_thresholds = [0.01, 0.05, 0.1, 0.5, 1.0]  # km²
+                    class_descriptions = [f"Class {i+1}: >{thresh} km²" for i, thresh in enumerate(drainage_thresholds[:5])]
+                    description = f"Drainage area classification by EXZECO analysis. Classes: {'; '.join(class_descriptions)}. 0=No flood risk."
+                    dst.update_tags(description=description)
+                
+                print(f"✅ Drainage classification GeoTIFF saved: {tiff_path}")
+                figures['drainage_tiff'] = tiff_path
+                
+            except Exception as e:
+                print(f"❌ Error saving drainage classification GeoTIFF: {e}")
+        
         if show_plots:
             plt.show()
         
@@ -1188,9 +1258,10 @@ class ExzecoVisualizer:
         
         return figures
 
-    def export_visualizations(self, output_dir: Union[str, Path], formats: List[str] = None):
+    def export_visualizations(self, output_dir: Union[str, Path], formats: List[str] = None, 
+                              config: Optional[object] = None):
         """
-        Export all visualizations to files.
+        Export all visualizations to files with descriptive naming.
         
         Parameters
         ----------
@@ -1198,6 +1269,8 @@ class ExzecoVisualizer:
             Output directory
         formats : list
             Export formats ('html', 'png', 'pdf')
+        config : object, optional
+            Configuration object with iterations and min_drainage_area for descriptive naming
         """
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -1207,34 +1280,62 @@ class ExzecoVisualizer:
         
         logger.info(f"Exporting visualizations to {output_dir}")
         
+        # Helper function to create descriptive filename
+        def create_descriptive_name(level: str, file_type: str, extension: str) -> str:
+            if config is not None:
+                # Extract noise level from level name (e.g., 'exzeco_200cm' -> '200cm')
+                noise_level_cm = level.split('_')[-1] if '_' in level else '0cm'
+                
+                # Create descriptive filename: {file_type}_{noise_level}_{iterations}_{drainage_threshold}
+                drainage_threshold_str = str(config.min_drainage_area).replace('.', 'p')
+                return f"{file_type}_{noise_level_cm}_{config.iterations}_{drainage_threshold_str}km2.{extension}"
+            else:
+                # Fallback to original naming if no config provided
+                return f"{file_type}_{level}.{extension}"
+        
         # Export for each noise level
         for level in self.results.keys():
             # Interactive map
             if 'html' in formats:
                 m = self.create_interactive_map(level)
-                m.save(str(output_dir / f"map_{level}.html"))
+                filename = create_descriptive_name(level, "map", "html")
+                m.save(str(output_dir / filename))
             
             # 3D visualization
             if self.dem_data is not None:
                 fig_3d = self.create_3d_visualization(level)
                 if 'html' in formats:
-                    fig_3d.write_html(str(output_dir / f"3d_{level}.html"))
+                    filename = create_descriptive_name(level, "3d", "html")
+                    fig_3d.write_html(str(output_dir / filename))
                 if 'png' in formats:
-                    fig_3d.write_image(str(output_dir / f"3d_{level}.png"))
+                    filename = create_descriptive_name(level, "3d", "png")
+                    fig_3d.write_image(str(output_dir / filename))
             
             # Heatmap
             fig_heat = self.create_risk_heatmap(level)
             if 'html' in formats:
-                fig_heat.write_html(str(output_dir / f"heatmap_{level}.html"))
+                filename = create_descriptive_name(level, "heatmap", "html")
+                fig_heat.write_html(str(output_dir / filename))
             if 'png' in formats:
-                fig_heat.write_image(str(output_dir / f"heatmap_{level}.png"))
+                filename = create_descriptive_name(level, "heatmap", "png")
+                fig_heat.write_image(str(output_dir / filename))
         
-        # Comparison plot
+        # Comparison plot (doesn't need noise-level specific naming)
         fig_comp = self.create_comparison_plot()
         if 'html' in formats:
-            fig_comp.write_html(str(output_dir / "comparison.html"))
+            if config is not None:
+                drainage_threshold_str = str(config.min_drainage_area).replace('.', 'p')
+                filename = f"comparison_{config.iterations}_{drainage_threshold_str}km2.html"
+            else:
+                filename = "comparison.html"
+            fig_comp.write_html(str(output_dir / filename))
         if 'png' in formats:
-            fig_comp.write_image(str(output_dir / "comparison.png"))
+            if config is not None:
+                drainage_threshold_str = str(config.min_drainage_area).replace('.', 'p')
+                filename = f"comparison_{config.iterations}_{drainage_threshold_str}km2.png"
+            else:
+                filename = "comparison.png"
+            fig_comp.write_image(str(output_dir / filename))
         
         logger.info(f"Visualizations exported successfully")
 
