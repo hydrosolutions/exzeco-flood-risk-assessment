@@ -20,7 +20,8 @@ from rasterio.crs import CRS
 from rasterio.transform import from_bounds
 import requests
 from pathlib import Path
-from typing import Tuple, List, Optional, Union
+from typing import Tuple, List, Optional, Union, Dict, Any
+from numpy.typing import NDArray
 import logging
 import hashlib
 import json
@@ -93,7 +94,7 @@ class DEMDownloader:
                 return json.load(f)
         return {}
     
-    def _save_cache_index(self):
+    def _save_cache_index(self) -> None:
         """Save cache index."""
         index_file = self.cache_dir / "cache_index.json"
         with open(index_file, 'w') as f:
@@ -168,7 +169,7 @@ class DEMDownloader:
         
         return output_path
     
-    def _download_srtm_elevation(self, bounds: Tuple, output_path: Path):
+    def _download_srtm_elevation(self, bounds: Tuple[float, float, float, float], output_path: Path) -> None:
         """Download SRTM using elevation library."""
         logger.info("Downloading SRTM tiles using elevation library...")
         
@@ -180,7 +181,7 @@ class DEMDownloader:
         
         logger.info(f"SRTM DEM saved to {output_path}")
     
-    def _download_copernicus(self, bounds: Tuple, output_path: Path):
+    def _download_copernicus(self, bounds: Tuple[float, float, float, float], output_path: Path) -> None:
         """Download Copernicus GLO-30 DEM tiles."""
         min_lon, min_lat, max_lon, max_lat = bounds
         
@@ -221,7 +222,7 @@ class DEMDownloader:
         # Merge tiles
         self._merge_tiles(tile_paths, bounds, output_path)
     
-    def _download_srtm_tiles(self, bounds: Tuple, output_path: Path, source: str):
+    def _download_srtm_tiles(self, bounds: Tuple[float, float, float, float], output_path: Path, source: str) -> None:
         """Download SRTM tiles from CGIAR or other sources."""
         min_lon, min_lat, max_lon, max_lat = bounds
         
@@ -340,7 +341,7 @@ class DEMDownloader:
         
         return False
     
-    def _merge_tiles(self, tile_paths: List[Path], bounds: Tuple, output_path: Path):
+    def _merge_tiles(self, tile_paths: List[Path], bounds: Tuple[float, float, float, float], output_path: Path) -> None:
         """
         Merge multiple DEM tiles and clip to bounds.
         
@@ -394,7 +395,7 @@ class DEMDownloader:
         
         logger.info(f"Merged DEM saved to {output_path}")
     
-    def _clip_dem(self, dem_path: Path, bounds: Tuple):
+    def _clip_dem(self, dem_path: Path, bounds: Tuple[float, float, float, float]) -> None:
         """
         Clip DEM to specified bounds.
         

@@ -30,13 +30,14 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List, Tuple, Optional, Any, Union
+from numpy.typing import NDArray
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-def compute_risk_metrics(results: Dict, analyzer: Any) -> Dict:
+def compute_risk_metrics(results: Dict[str, Dict[str, Any]], analyzer: Any) -> Dict[str, Dict[str, Any]]:
     """
     Compute comprehensive risk metrics for all noise levels.
     

@@ -26,7 +26,8 @@ from rasterio.transform import from_bounds, Affine
 from rasterio.warp import reproject, Resampling
 import xarray as xr
 import rioxarray as rxr
-from typing import Tuple, Dict, List, Optional, Union
+from typing import Tuple, Dict, List, Optional, Union, Any, Callable
+from numpy.typing import NDArray
 from dataclasses import dataclass
 import warnings
 from tqdm import tqdm
@@ -43,17 +44,17 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ExzecoConfig:
     """Configuration parameters for EXZECO analysis."""
-    noise_levels: List[float] = None  # Noise levels in meters
+    noise_levels: Optional[List[float]] = None  # Noise levels in meters
     iterations: int = 100  # Number of Monte Carlo iterations
     min_drainage_area: float = 0.01  # Minimum drainage area in km²
-    drainage_classes: List[float] = None  # Drainage area classes in km²
+    drainage_classes: Optional[List[float]] = None  # Drainage area classes in km²
     n_jobs: int = -1  # Number of parallel jobs
     chunk_size: int = 1000  # Chunk size for processing
     seed: Optional[int] = 42  # Random seed for reproducibility
     shapefile_path: Optional[str] = None  # Path to shapefile for study area definition
-    bounds: Optional[Tuple] = None  # Fallback bounding box
+    bounds: Optional[Tuple[float, float, float, float]] = None  # Fallback bounding box
     
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.noise_levels is None:
             self.noise_levels = [0.2, 0.4, 0.6, 0.8, 1.0]
         if self.drainage_classes is None:
@@ -73,7 +74,7 @@ class ExzecoAnalysis:
     - Result aggregation and export
     """
     
-    def __init__(self, config: Optional[ExzecoConfig] = None):
+    def __init__(self, config: Optional[ExzecoConfig] = None) -> None:
         """
         Initialize EXZECO analysis.
         
@@ -99,14 +100,17 @@ class ExzecoAnalysis:
         }
         
         # Store results
-        self.results = {}
-        self.dem_data = None
-        self.transform = None
-        self.crs = None
-        self.study_areas = None  # For storing individual subcatchments
-        self.total_study_area = None  # For storing entire domain
+        self.results: Dict[str, Dict[str, Any]] = {}
+        self.dem_data: Optional[NDArray[np.floating]] = None
+        self.transform: Optional[Affine] = None
+        self.crs: Optional[Any] = None
+        self.study_areas: Optional[gpd.GeoDataFrame] = None  # For storing individual subcatchments
+        self.total_study_area: Optional[gpd.GeoDataFrame] = None  # For storing entire domain
+        self.resolution: Optional[float] = None
+        self.resolution_x: Optional[float] = None
+        self.resolution_y: Optional[float] = None
         
-    def load_study_areas(self, shapefile_path: Optional[str] = None, bounds: Optional[Tuple] = None) -> Tuple[gpd.GeoDataFrame, Tuple]:
+    def load_study_areas(self, shapefile_path: Optional[str] = None, bounds: Optional[Tuple[float, float, float, float]] = None) -> Tuple[gpd.GeoDataFrame, Tuple[float, float, float, float]]:
         """
         Load study areas from shapefile or bounds.
         
@@ -119,7 +123,7 @@ class ExzecoAnalysis:
             
         Returns
         -------
-        tuple
+        Tuple[gpd.GeoDataFrame, Tuple[float, float, float, float]]
             (GeoDataFrame of study areas, total bounds)
             
         Raises
@@ -518,7 +522,7 @@ class ExzecoAnalysis:
         # Iterative topological sort and accumulation to avoid recursion limit
         visited = np.zeros((rows, cols), dtype=bool)
         
-        def accumulate_iterative(start_i, start_j):
+        def accumulate_iterative(start_i: int, start_j: int) -> None:
             """Iterative implementation to avoid recursion depth issues"""
             stack = [(start_i, start_j)]
             processing_stack = []
@@ -1040,7 +1044,7 @@ def load_config(config_path: Union[str, Path]) -> ExzecoConfig:
     )
 
 
-def run_exzeco_with_config(config_path: Union[str, Path], dem_path: Union[str, Path], output_dir: Union[str, Path]):
+def run_exzeco_with_config(config_path: Union[str, Path], dem_path: Union[str, Path], output_dir: Union[str, Path]) -> Tuple[ExzecoAnalysis, Dict[str, Dict[str, Any]], pd.DataFrame]:
     """
     Run EXZECO analysis using configuration file.
     

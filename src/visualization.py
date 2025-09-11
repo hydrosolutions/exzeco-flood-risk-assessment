@@ -50,7 +50,8 @@ from rasterio.warp import reproject, Resampling, calculate_default_transform
 import ipywidgets as widgets
 from IPython.display import display, HTML
 import contextily as ctx
-from typing import Dict, List, Tuple, Optional, Union
+from typing import Dict, List, Tuple, Optional, Union, Any, Callable
+from numpy.typing import NDArray
 from pathlib import Path
 import base64
 from io import BytesIO
@@ -111,7 +112,7 @@ class ExzecoVisualizer:
     - Animation capabilities
     """
     
-    def __init__(self, results: Dict, dem_path: Optional[str] = None):
+    def __init__(self, results: Dict[str, Dict[str, Any]], dem_path: Optional[str] = None) -> None:
         """
         Initialize visualizer.
         
@@ -136,7 +137,7 @@ class ExzecoVisualizer:
                              '#2c7fb8', '#253494']
         self.risk_colors = ['#00ff00', '#ffff00', '#ff8c00', '#ff0000']
         
-    def _load_dem(self):
+    def _load_dem(self) -> None:
         """Load DEM data for visualization."""
         with rasterio.open(self.dem_path) as src:
             self.dem_data = src.read(1)
@@ -262,7 +263,7 @@ class ExzecoVisualizer:
         
         return m
     
-    def _add_flood_zones(self, m: folium.Map, noise_level: str):
+    def _add_flood_zones(self, m: folium.Map, noise_level: str) -> None:
         """Add flood zone layer to map."""
         data = self.results[noise_level]
         prob_map = data['probability_map']
@@ -285,7 +286,7 @@ class ExzecoVisualizer:
             zindex=1
         ).add_to(m)
     
-    def _add_hillshade_layer(self, m: folium.Map):
+    def _add_hillshade_layer(self, m: folium.Map) -> None:
         """Add hillshade layer from DEM."""
         from scipy import ndimage
         
@@ -326,7 +327,7 @@ class ExzecoVisualizer:
         # Add shapefile overlay on hillshade
         self._add_shapefile_overlay(m)
     
-    def _add_shapefile_overlay(self, m: folium.Map):
+    def _add_shapefile_overlay(self, m: folium.Map) -> None:
         """Add shapefile overlay as black border on hillshade."""
         try:
             # Path to the GeoPackage file
@@ -363,7 +364,7 @@ class ExzecoVisualizer:
             logger.warning(f"Could not add shapefile overlay: {e}")
             print(f"Warning: Could not add shapefile overlay: {e}")
     
-    def _add_legend(self, m: folium.Map, noise_level: str):
+    def _add_legend(self, m: folium.Map, noise_level: str) -> None:
         """Add legend to map."""
         legend_html = '''
         <div style="position: fixed; 
@@ -753,7 +754,7 @@ class ExzecoVisualizer:
             dashboard
         ])
     
-    def plot_statistics(self, noise_level: str, config=None, save_files: bool = False, output_dir: Optional[Path] = None):
+    def plot_statistics(self, noise_level: str, config: Optional[Any] = None, save_files: bool = False, output_dir: Optional[Path] = None) -> None:
         """Plot statistical analysis with config information and file saving capabilities."""
         data = self.results[noise_level]
         prob_map = data['probability_map']
@@ -918,7 +919,7 @@ class ExzecoVisualizer:
         
         plt.show()
     
-    def _create_plotly_statistics(self, noise_level: str, prob_map: np.ndarray, config=None):
+    def _create_plotly_statistics(self, noise_level: str, prob_map: NDArray[np.floating], config: Optional[Any] = None) -> go.Figure:
         """Create interactive Plotly version of statistics plots."""
         import plotly.graph_objects as go
         from plotly.subplots import make_subplots
@@ -1061,19 +1062,19 @@ class ExzecoVisualizer:
         
         return f"data:image/png;base64,{img_str}"
     
-    def _add_drainage_network(self, m: folium.Map):
+    def _add_drainage_network(self, m: folium.Map) -> None:
         """Add drainage network layer to map (placeholder)."""
         # This is a placeholder - in a real implementation, you would
         # compute and add actual drainage networks
         logger.info("Drainage network layer not implemented - placeholder added")
         
-    def _add_contour_lines(self, m: folium.Map):
+    def _add_contour_lines(self, m: folium.Map) -> None:
         """Add contour lines layer to map (placeholder)."""
         # This is a placeholder - in a real implementation, you would
         # generate contour lines from the DEM
         logger.info("Contour lines layer not implemented - placeholder added")
         
-    def _add_risk_classification(self, m: folium.Map):
+    def _add_risk_classification(self, m: folium.Map) -> None:
         """Add risk classification layer to map (placeholder)."""
         # This is a placeholder - in a real implementation, you would
         # add classified risk zones
@@ -1430,8 +1431,8 @@ class ExzecoVisualizer:
         
         return figures
 
-    def export_visualizations(self, output_dir: Union[str, Path], formats: List[str] = None, 
-                              config: Optional[object] = None):
+    def export_visualizations(self, output_dir: Union[str, Path], formats: Optional[List[str]] = None, 
+                              config: Optional[Any] = None) -> None:
         """
         Export all visualizations to files with descriptive naming.
         
