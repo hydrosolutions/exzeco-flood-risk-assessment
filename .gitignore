@@ -1,6 +1,9 @@
 # Output files and directories
 data/outputs/
 
+# DEM cache directories
+data/dem/elevation_cache/
+
 # Python cache
 __pycache__/
 *.pyc
