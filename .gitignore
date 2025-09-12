@@ -2,6 +2,7 @@
 data/outputs/
 
 # DEM cache directories
+data/dem/cache/
 data/dem/elevation_cache/
 notebooks/data/dem/elevation_cache/
 
