@@ -192,6 +192,38 @@ OUTPUT DIRECTORY:
 All outputs are saved to: ../data/outputs/
 """
 
+
+# %%
+# =============================================================================
+# ENVIRONMENT ACTIVATION (Optional - for reference only)
+# =============================================================================
+
+# Note: If running this script, ensure you're already in the 'exzeco' conda environment
+# You can activate it before running the script with:
+# conda activate exzeco
+
+# To check if you're in the correct environment:
+import sys
+import os
+
+print(f"Python executable: {sys.executable}")
+print(f"Python version: {sys.version}")
+
+# Check if we're in a conda environment
+if 'CONDA_DEFAULT_ENV' in os.environ:
+    print(f"Active conda environment: {os.environ['CONDA_DEFAULT_ENV']}")
+else:
+    print("No conda environment detected")
+
+# Verify key packages are available
+try:
+    import numpy, pandas, geopandas, rasterio, matplotlib
+    print("✅ Core packages available")
+except ImportError as e:
+    print(f"❌ Missing packages: {e}")
+    print("Please ensure you're in the 'exzeco' conda environment")
+
+
 # %%
 # =============================================================================
 # 1. SETUP AND INITIALIZATION
