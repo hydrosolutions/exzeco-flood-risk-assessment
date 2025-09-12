@@ -1,0 +1,1280 @@
+---
+title: "EXZECO Flood Risk Assessment - Complete Analysis Workflow"
+subtitle: "Preliminary flood risk assessment using Monte Carlo simulation on Digital Elevation Models"
+author: "Tobias Siegfried, hydrosolutions GmbH"
+date: "`r Sys.Date()`"
+format:
+  html:
+    theme: cosmo
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    code-fold: false
+    code-tools: true
+    embed-resources: true
+    fig-width: 12
+    fig-height: 8
+    fig-dpi: 300
+  pdf:
+    documentclass: article
+    geometry: margin=1in
+    toc: true
+    number-sections: true
+    fig-width: 8
+    fig-height: 6
+jupyter: python3
+execute:
+  warning: false
+  message: false
+  cache: false
+---
+
+::: {.callout-note}
+## About this Analysis
+
+This notebook performs the complete EXZECO workflow for preliminary flood risk assessment using Monte Carlo simulation on Digital Elevation Models.
+
+**Based on the methodology from CEREMA:**  
+https://www.cerema.fr/system/files/documents/2020/07/methode_exzeco_25mai2020.pdf
+
+**License:** MIT  
+**Date:** 2025
+:::
+
+::: {.callout-important}
+## Prerequisites
+
+Before running this analysis, ensure:
+
+1. **Environment Setup**: Activate the conda environment:
+   ```bash
+   conda activate exzeco
+   ```
+
+2. **Configuration**: Verify `../config/config.yml` exists and contains your study area settings
+
+3. **Study Area Data**: Place your study area shapefile in `data/doi/` directory or define bounding box coordinates in config
+
+4. **Dependencies**: All packages from `requirements.txt` are installed
+:::
+
+## Environment Validation {#sec-environment}
+
+### Computational Environment Requirements
+
+The EXZECO methodology requires a sophisticated computational environment capable of handling large-scale geospatial data processing and Monte Carlo simulations. The analysis relies on several key scientific Python libraries that provide the foundation for numerical computation, geospatial analysis, and visualization.
+
+**Critical Dependencies:**
+- **NumPy**: Fundamental package for scientific computing with multi-dimensional arrays
+- **Pandas**: Data manipulation and analysis library for structured data handling
+- **GeoPandas**: Geospatial extension of pandas for vector data operations
+- **Rasterio**: I/O library for raster datasets built on GDAL
+- **Matplotlib**: Comprehensive plotting library for static visualizations
+
+The environment validation ensures computational reproducibility and identifies potential configuration issues before initiating the computationally intensive analysis workflow.
+
+```{python}
+#| label: environment-check
+#| echo: true
+
+# Check environment and package availability
+import sys
+import os
+
+print(f"Python executable: {sys.executable}")
+print(f"Python version: {sys.version}")
+
+# Check if we're in a conda environment
+if 'CONDA_DEFAULT_ENV' in os.environ:
+    print(f"Active conda environment: {os.environ['CONDA_DEFAULT_ENV']}")
+else:
+    print("No conda environment detected")
+
+# Verify key packages are available
+try:
+    import numpy, pandas, geopandas, rasterio, matplotlib
+    print("✅ Core packages available")
+except ImportError as e:
+    print(f"❌ Missing packages: {e}")
+    print("Please ensure you're in the 'exzeco' conda environment")
+```
+
+## Setup and Initialization {#sec-setup}
+
+### Scientific Computing Stack Initialization
+
+The EXZECO flood risk assessment methodology requires a comprehensive scientific computing stack that integrates geospatial analysis, statistical computation, and advanced visualization capabilities. This section establishes the computational framework necessary for processing Digital Elevation Models (DEMs) and conducting Monte Carlo simulations.
+
+The methodology builds upon established libraries in the scientific Python ecosystem, each serving specific analytical functions:
+
+- **Geospatial Analysis**: GeoPandas and Rasterio provide robust capabilities for handling vector and raster geospatial data
+- **Numerical Computation**: NumPy and SciPy enable efficient array operations and scientific calculations
+- **Statistical Analysis**: Pandas facilitates data manipulation and statistical computation
+- **Visualization**: Matplotlib, Seaborn, and Plotly enable both static and interactive visualizations
+- **Parallel Processing**: Joblib and multiprocessing libraries support computational scalability
+
+### Import Required Libraries
+
+The following imports establish the core computational environment required for the EXZECO analysis workflow:
+
+```{python}
+#| label: imports
+#| echo: true
+
+import sys
+import os
+import warnings
+warnings.filterwarnings('ignore')
+
+# Add src directory to path
+sys.path.append('../src')
+
+import numpy as np
+import pandas as pd
+import geopandas as gpd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from pathlib import Path
+import yaml
+from typing import Tuple, Dict, List
+import folium
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from tqdm import tqdm
+import rasterio
+from shapely.geometry import box
+
+# Import EXZECO modules
+from exzeco import ExzecoAnalysis, ExzecoConfig, load_config
+from dem_utils import DEMDownloader, StudyArea
+from visualization import ExzecoVisualizer
+
+# Set plotting style
+plt.style.use('seaborn-v0_8-darkgrid')
+sns.set_palette("husl")
+
+# Define output directory (used throughout the analysis)
+output_dir = Path("../data/outputs")
+output_dir.mkdir(parents=True, exist_ok=True)
+
+print("✅ All modules loaded successfully!")
+print(f"📁 Output directory: {output_dir.absolute()}")
+```
+
+### Visualization Configuration for Scientific Publication
+
+High-quality visualizations are essential for scientific communication and publication. The following configuration ensures that all generated figures meet scientific publication standards with appropriate resolution, font sizes, and formatting.
+
+```{python}
+#| label: plot-config
+#| echo: true
+
+# Configure matplotlib for high-resolution plots
+import matplotlib as mpl
+mpl.rcParams['figure.dpi'] = 300  # High DPI for crisp plots
+mpl.rcParams['savefig.dpi'] = 300  # High DPI for saved figures
+mpl.rcParams['figure.figsize'] = [12, 8]  # Default figure size [inches]
+mpl.rcParams['font.size'] = 12  # Readable font size
+mpl.rcParams['axes.labelsize'] = 12  # Axis label font size
+mpl.rcParams['axes.titlesize'] = 14  # Title font size
+mpl.rcParams['xtick.labelsize'] = 10  # X-tick font size
+mpl.rcParams['ytick.labelsize'] = 10  # Y-tick font size
+mpl.rcParams['legend.fontsize'] = 11  # Legend font size
+
+# Configure Plotly
+import plotly.io as pio
+try:
+    # Try to configure kaleido if available
+    if hasattr(pio, 'kaleido') and pio.kaleido.scope is not None:
+        pio.kaleido.scope.mathjax = None  # Faster rendering
+except (AttributeError, TypeError):
+    # Skip if kaleido is not available or configured
+    pass
+pio.renderers.default = "browser"  # Use browser for script execution
+
+print("✅ High-resolution plot configuration applied!")
+print(f"   • Figure DPI: {mpl.rcParams['figure.dpi']}")
+print(f"   • Save DPI: {mpl.rcParams['savefig.dpi']}")
+print(f"   • Default figure size: {mpl.rcParams['figure.figsize']}")
+print(f"   • Plotly renderer: {pio.renderers.default}")
+```
+
+## Configuration {#sec-config}
+
+### Analysis Parameter Configuration
+
+The EXZECO methodology employs a configuration-driven approach that ensures reproducibility and facilitates sensitivity analysis. The configuration parameters directly influence the Monte Carlo simulation outcomes and must be carefully selected based on the study area characteristics and assessment objectives.
+
+**Key Configuration Parameters:**
+
+- **Noise Levels**: Digital elevation model uncertainty levels (typically 0.2-1.0 meters) representing potential vertical accuracy limitations
+- **Iterations**: Number of Monte Carlo simulations determining statistical robustness (recommended: 10-100)
+- **Minimum Drainage Area**: Threshold for flow accumulation analysis affecting the delineation of potential flood-prone areas
+- **Parallel Processing**: Computational optimization parameter for multi-core execution
+
+The configuration is externalized in YAML format to promote best practices in scientific computing reproducibility and parameter management.
+
+```{python}
+#| label: load-config
+#| echo: true
+
+# Load configuration from config file
+config = load_config('../config/config.yml')
+
+print("Configuration:")
+print(f"  Noise levels: {config.noise_levels}")
+print(f"  Iterations: {config.iterations}")
+print(f"  Min drainage area: {config.min_drainage_area} km²")
+print(f"  Parallel jobs: {config.n_jobs}")
+```
+
+## Define Study Area {#sec-study-area}
+
+### Geospatial Domain Definition and Coordinate System Management
+
+The definition of the study area constitutes a critical component of the EXZECO methodology, as it establishes the spatial domain for the flood risk assessment. The methodology supports both vector-based study area definition (through shapefiles or other geospatial formats) and coordinate-based bounding box specification.
+
+**Coordinate Reference System Considerations:**
+
+The analysis requires all geospatial data to be in the WGS84 geographic coordinate system (EPSG:4326) to ensure compatibility with global Digital Elevation Model datasets. Automatic reprojection is performed when necessary, with appropriate metadata preservation and quality checks.
+
+**Study Area Validation Process:**
+
+1. **Spatial Integrity Verification**: Geometric validation of input polygons
+2. **Coordinate System Standardization**: Automatic reprojection to EPSG:4326
+3. **Boundary Extraction**: Computation of minimal bounding rectangle for DEM acquisition
+4. **Area Calculation**: Geodetic area computation for scaling considerations
+
+```{python}
+#| label: study-area
+#| echo: true
+
+# Construct path to shapefile from config
+# The path in config.yml is relative to the project root.
+# The notebook is in notebooks/, so we need to go up one level.
+shapefile_path = Path('../') / config.shapefile_path
+
+# Load from shapefile or GeoJSON with error handling
+try:
+    # Check if the shapefile path exists
+    if not shapefile_path.exists():
+        raise FileNotFoundError(f"Shapefile not found at: {shapefile_path}")
+    
+    # Try to load the shapefile
+    study_gdf = gpd.read_file(shapefile_path)
+    
+    if study_gdf.empty:
+        raise ValueError(f"Shapefile is empty: {shapefile_path}")
+    
+    print(f"✅ Shapefile loaded successfully: {shapefile_path.name}")
+    print(f"   • Features: {len(study_gdf)}")
+    print(f"   • Geometry types: {study_gdf.geometry.type.unique()}")
+    
+    # Ensure the GeoDataFrame is in lat/lon coordinates (EPSG:4326)
+    original_crs = study_gdf.crs
+    needs_reprojection = study_gdf.crs != 'EPSG:4326'
+
+    if needs_reprojection:
+        study_gdf = study_gdf.to_crs('EPSG:4326')
+        
+        # Save the transformed shapefile to avoid coordinate system issues in analysis
+        transformed_shapefile_path = shapefile_path.parent / f"{shapefile_path.stem}_wgs84{shapefile_path.suffix}"
+        study_gdf.to_file(transformed_shapefile_path, driver='GPKG')
+        print(f"🗺️  Shapefile: {shapefile_path.name} | {original_crs} → EPSG:4326 | Saved as: {transformed_shapefile_path.name}")
+    else:
+        transformed_shapefile_path = shapefile_path
+        print(f"🗺️  Shapefile: {shapefile_path.name} | CRS: {original_crs} ✓")
+
+    # Extract bounds and create study area
+    STUDY_BOUNDS = tuple(study_gdf.total_bounds)
+    
+except (FileNotFoundError, ValueError, Exception) as e:
+    print(f"⚠️  Error loading shapefile: {e}")
+    print(f"🔄 Falling back to bounding box coordinates from config...")
+    
+    # Fallback to bounding box from config
+    if hasattr(config, 'bounds') and config.bounds:
+        STUDY_BOUNDS = tuple(config.bounds)
+        print(f"📦 Using bounding box from config: {STUDY_BOUNDS}")
+        
+        # Create a simple rectangular polygon for the bounding box
+        from shapely.geometry import box
+        bbox_polygon = box(*STUDY_BOUNDS)
+        study_gdf = gpd.GeoDataFrame([1], geometry=[bbox_polygon], crs='EPSG:4326')
+        transformed_shapefile_path = None  # No transformed file for bounding box
+        
+        print(f"✅ Created study area from bounding box")
+    else:
+        print(f"❌ No fallback bounding box found in config!")
+        raise ValueError("Neither shapefile nor bounding box coordinates are available. Please check your config.yml file.")
+
+# Create study area and calculate area
+study_area = StudyArea(STUDY_BOUNDS)
+area_km2 = study_area.get_area_km2()
+
+print(f"📍 Study Area: {area_km2:.1f} km² | Bounds: {STUDY_BOUNDS[1]:.4f}°N-{STUDY_BOUNDS[3]:.4f}°N, {STUDY_BOUNDS[0]:.4f}°E-{STUDY_BOUNDS[2]:.4f}°E")
+```
+
+### Cartographic Visualization of Study Domain
+
+The cartographic representation of the study area provides essential spatial context and serves as a quality assurance measure for the domain definition. Both static and interactive visualizations are generated to support different analytical and communication needs.
+
+```{python}
+#| label: study-area-viz
+#| echo: true
+
+# Create comprehensive study area visualization (static + interactive)
+import contextlib
+import io
+import importlib
+import visualization
+importlib.reload(visualization)
+from visualization import create_study_area_visualization
+
+# Suppress verbose output from visualization function
+print("📊 Creating study area visualizations...")
+with contextlib.redirect_stdout(io.StringIO()):
+    visualization_results = create_study_area_visualization(
+        study_area=study_area,
+        area_km2=area_km2,
+        output_dir=output_dir,
+        show_static=True,
+        show_interactive=True,
+        polygon_gdf=study_gdf
+    )
+
+print("✅ Study area visualizations created")
+```
+
+## Download and Process Digital Elevation Model (DEM) {#sec-dem}
+
+### Digital Elevation Model Acquisition and Processing
+
+Digital Elevation Models (DEMs) form the fundamental input data for the EXZECO flood risk assessment methodology. The quality, resolution, and accuracy of the DEM directly influence the reliability of the flood risk predictions. This section implements a robust DEM acquisition workflow with multiple fallback data sources to ensure analysis continuity.
+
+**DEM Data Sources and Hierarchy:**
+
+1. **SRTM 1 Arc-Second (30m)**: High-resolution global coverage with excellent vertical accuracy
+2. **SRTM 3 Arc-Second (90m)**: Lower resolution fallback with global coverage
+3. **Alternative sources**: Additional providers for specific geographic regions
+
+**Quality Assurance Measures:**
+
+- **Spatial Resolution Validation**: Verification of pixel size and spatial extent
+- **Vertical Accuracy Assessment**: Statistical analysis of elevation range and distribution
+- **Data Completeness Check**: Identification and handling of no-data values
+- **Coordinate System Verification**: Ensuring compatibility with analysis requirements
+
+The DEM processing workflow includes intelligent caching to avoid redundant downloads and automatic naming based on study area characteristics for improved data management.
+
+```{python}
+#| label: dem-download
+#| echo: true
+
+# Reload DEM utils module to get the latest changes
+import importlib
+import dem_utils
+importlib.reload(dem_utils)
+from dem_utils import DEMDownloader
+
+# Initialize DEM downloader
+dem_downloader = DEMDownloader()
+
+# Get absolute path for cache directory
+current_dir = os.getcwd()
+cache_dir = Path(current_dir).parent / "data" / "dem" / "cache"
+
+# Generate expected DEM filename to check if it exists
+expected_filename = "study_area_dem.tif"  # Default
+if shapefile_path is not None:
+    shapefile_stem = Path(shapefile_path).stem
+    # Apply same logic as in DEM downloader
+    if shapefile_stem.endswith('_wgs84'):
+        shapefile_stem = shapefile_stem[:-6]
+    for suffix in ['_wgs84', '_4326', '_reprojected']:
+        if shapefile_stem.endswith(suffix):
+            shapefile_stem = shapefile_stem[:shapefile_stem.rfind(suffix)]
+            break
+    expected_filename = f"{shapefile_stem}_dem.tif"
+
+expected_dem_path = cache_dir / expected_filename
+if expected_dem_path.exists():
+    status = "📁 Cached"
+else:
+    status = "🌍 Download"
+
+print(f"🎯 DEM Processing: {expected_filename} | Status: {status}")
+
+# Download DEM using the refactored method with shapefile-based naming
+dem_path, dem_stats = dem_downloader.download_dem_with_fallback(
+    bounds=STUDY_BOUNDS,
+    cache_dir=cache_dir,
+    output_filename="study_area_dem.tif",  # Will be overridden if shapefile_path is provided
+    product='SRTM1',  # Trying with 30m resolution
+    shapefile_path=shapefile_path  # Pass shapefile path for automatic naming
+)
+
+# Read DEM data for shape information
+with rasterio.open(dem_path) as src:
+    dem_data = src.read(1)
+
+print(f"✅ DEM Ready: {dem_data.shape} | {dem_stats['min_elevation']:.0f}-{dem_stats['max_elevation']:.0f}m | {dem_stats['resolution']}m")
+```
+
+### Topographic Analysis and Terrain Characterization
+
+The comprehensive analysis of the Digital Elevation Model provides essential insights into the topographic characteristics that influence flood behavior. This analysis includes multiple terrain derivatives that are fundamental to understanding surface water flow patterns and potential flood propagation pathways.
+
+**Terrain Analysis Components:**
+
+- **Elevation Distribution**: Statistical characterization of topographic relief
+- **Slope Analysis**: Gradient computation for flow velocity estimation
+- **Aspect Analysis**: Flow direction tendencies and watershed orientation
+- **Hillshade Rendering**: Three-dimensional visualization for terrain interpretation
+
+These terrain derivatives serve both as quality control measures and as input for subsequent hydrological analysis steps in the EXZECO methodology.
+
+```{python}
+#| label: dem-viz
+#| echo: true
+#| fig-cap: "Digital Elevation Model analysis showing elevation, slope, aspect, and hillshade"
+
+# Visualize DEM using the visualization module
+# Reload visualization module to get the latest DEMVisualizer class
+import importlib
+import visualization
+importlib.reload(visualization)
+from visualization import create_dem_visualization
+
+# Create comprehensive DEM analysis visualization
+dem_fig = create_dem_visualization(
+    dem_path=dem_path,
+    show_plot=True,
+    save_individual=True,
+    save_path=output_dir / 'dem_analysis.png',
+    shapefile_path=transformed_shapefile_path
+)
+```
+
+## EXZECO Analysis {#sec-exzeco}
+
+### Theoretical Foundation of the EXZECO Methodology
+
+The EXZECO (EXtraction de Zones ECOulement) methodology represents a novel approach to preliminary flood risk assessment that leverages topographic uncertainty analysis through Monte Carlo simulation. Originally developed by CEREMA (Centre d'études et d'expertise sur les risques, l'environnement, la mobilité et l'aménagement), this methodology addresses the challenge of flood risk assessment in data-sparse environments where detailed hydraulic modeling is not feasible.
+
+**Core Methodological Principles:**
+
+1. **Topographic Uncertainty Quantification**: Systematic incorporation of DEM vertical accuracy limitations
+2. **Stochastic Simulation**: Monte Carlo approach to capture uncertainty propagation
+3. **Flow Accumulation Analysis**: D8 algorithm for surface water flow computation
+4. **Probabilistic Risk Assessment**: Statistical aggregation of simulation outcomes
+
+The methodology is particularly valuable for preliminary assessments, regional-scale studies, and situations where traditional hydraulic modeling approaches are computationally prohibitive or data-limited.
+
+### Drainage Area Threshold Analysis
+
+The determination of an appropriate drainage area threshold constitutes a critical calibration step that significantly influences the sensitivity and specificity of the flood risk assessment. This threshold defines the minimum contributing area required for a pixel to be considered as a potential flow path, effectively filtering out spurious flow connections while preserving hydrologically meaningful pathways.
+
+**Threshold Selection Criteria:**
+
+- **Geomorphological Considerations**: Landscape-specific drainage density patterns
+- **Scale Appropriateness**: Matching threshold to analysis resolution and objectives
+- **Statistical Distribution**: Percentile-based selection from flow accumulation distribution
+- **Validation Against Known Features**: Comparison with observed drainage networks
+
+```{python}
+#| label: drainage-threshold
+#| echo: true
+
+print("🎯 FINDING APPROPRIATE DRAINAGE AREA THRESHOLD")
+print("=" * 55)
+
+# Create temporary analyzer to analyze flow accumulation
+temp_config = ExzecoConfig(
+    noise_levels=[0.2, 0.4],  
+    iterations=5,  
+    min_drainage_area=0.001,  
+    n_jobs=1  
+)
+
+temp_analyzer = ExzecoAnalysis(temp_config)
+temp_analyzer.load_dem(dem_path)
+
+# Calculate flow accumulation for original DEM
+flow_dir, slopes = temp_analyzer._compute_flow_direction_d8(temp_analyzer.dem_data)
+flow_acc = temp_analyzer._compute_flow_accumulation(flow_dir)
+
+# Convert to drainage area
+pixel_area_km2 = (temp_analyzer.resolution_x * temp_analyzer.resolution_y) / 1e6
+drainage_area = flow_acc * pixel_area_km2
+
+print(f"Drainage area statistics:")
+print(f"  Single pixel area: {pixel_area_km2:.6f} km²")
+print(f"  Min drainage: {np.min(drainage_area):.6f} km²")
+print(f"  Max drainage: {np.max(drainage_area):.6f} km²")
+print(f"  90th percentile: {np.percentile(drainage_area, 90):.6f} km²")
+print(f"  95th percentile: {np.percentile(drainage_area, 95):.6f} km²")
+print(f"  99th percentile: {np.percentile(drainage_area, 99):.6f} km²")
+
+# Test different thresholds to find appropriate one
+thresholds_to_test = config.noise_levels  # Use config values
+print(f"\n📊 Testing different drainage area thresholds:")
+for thresh in thresholds_to_test:
+    pixels_above = np.sum(drainage_area >= thresh)
+    percent_above = 100 * pixels_above / drainage_area.size
+    print(f"  {thresh:0.2f} km²: {pixels_above:,} pixels ({percent_above:.1f}%)")
+
+# Choose threshold that includes 10-30% of study area (typical for EXZECO)
+appropriate_threshold = 0.05  # km²
+print(f"\n🎯 Selected threshold: {appropriate_threshold} km²")
+print(f"   This represents {appropriate_threshold/pixel_area_km2:.0f} pixels minimum")
+
+# Select hand-picked threshold and override automatically determined one (uncomment if needed)
+appropriate_threshold = 0.1 # km²
+```
+
+### Monte Carlo Simulation Implementation
+
+The Monte Carlo simulation represents the core computational engine of the EXZECO methodology. This stochastic approach generates multiple realizations of the Digital Elevation Model by adding spatially uniform random noise within specified uncertainty bounds, then computes flow accumulation for each realization.
+
+**Simulation Workflow:**
+
+1. **Noise Generation**: Uniform random perturbation within defined uncertainty bounds
+2. **Flow Direction Computation**: D8 algorithm application for each DEM realization
+3. **Flow Accumulation Calculation**: Drainage area computation for each simulation
+4. **Threshold Application**: Binary classification based on drainage area criterion
+5. **Statistical Aggregation**: Probability computation across all realizations
+
+The computational intensity of this approach necessitates efficient implementation with parallel processing capabilities for larger study areas and higher iteration counts.
+
+```{python}
+#| label: monte-carlo
+#| echo: true
+
+# Configure final EXZECO analysis
+final_config = ExzecoConfig(
+    noise_levels=config.noise_levels,  # Use config values
+    iterations=config.iterations,  # Use config values  
+    min_drainage_area=appropriate_threshold,
+    n_jobs=config.n_jobs  # Use config values  
+)
+
+print(f"\n🚀 Running EXZECO Analysis")
+print(f"   Noise levels: {final_config.noise_levels}")
+print(f"   Iterations: {final_config.iterations}")  
+print(f"   Min drainage area: {final_config.min_drainage_area} km²")
+print(f"   Using shapefile: {transformed_shapefile_path}")
+
+# Run complete EXZECO analysis with transformed shapefile
+analyzer = ExzecoAnalysis(final_config)
+
+try:
+    results = analyzer.run_full_analysis(
+        dem_path=dem_path,
+        bounds=STUDY_BOUNDS,
+        shapefile_path=transformed_shapefile_path  # Use the transformed shapefile
+    )
+    
+    print(f"\n✅ EXZECO ANALYSIS COMPLETED!")
+    
+    # Generate summary report
+    report = analyzer.generate_report()
+    print(f"\n📈 ANALYSIS RESULTS:")
+    print(report)
+    print(f"\n🎉 EXZECO ANALYSIS SUCCESSFUL!")
+    
+except Exception as e:
+    print(f"❌ Error in EXZECO analysis: {e}")
+    import traceback
+    traceback.print_exc()
+```
+
+## Visualization of Results {#sec-visualization}
+
+### Cartographic Representation of Flood Probability
+
+The visualization of EXZECO results requires sophisticated cartographic techniques that effectively communicate probabilistic flood risk information to diverse stakeholder audiences. The flood probability maps represent the central output of the analysis, encoding the likelihood of flow concentration at each location within the study domain.
+
+**Visualization Design Principles:**
+
+- **Color Scheme Selection**: Perceptually uniform color palettes for accurate risk communication
+- **Probability Threshold Mapping**: Clear delineation of risk categories based on probability values
+- **Spatial Context Integration**: Overlay of administrative boundaries and geographic reference features
+- **Scale-Appropriate Detail**: Visualization resolution matching analysis purposes and intended use
+
+The probabilistic nature of the results necessitates careful consideration of uncertainty communication in the cartographic design, ensuring that stakeholders understand both the magnitude and confidence of the flood risk predictions.
+
+### Flood Probability Maps
+
+```{python}
+#| label: flood-probability
+#| echo: true
+#| fig-cap: "Flood probability visualization with study area boundaries"
+
+# Reload EXZECO and visualization module to get the fix
+import importlib
+import exzeco
+importlib.reload(exzeco)
+from exzeco import ExzecoAnalysis, ExzecoConfig, load_config
+importlib.reload(visualization)
+from visualization import ExzecoVisualizer
+
+# Create visualizer instance
+visualizer = ExzecoVisualizer(results, dem_path)
+
+# Create flood probability visualization with shapefile overlay
+fig = visualizer.plot_flood_probability_with_shapefile(
+    noise_level='exzeco_200cm',
+    shapefile_gdf=study_gdf,
+    threshold=0.5,
+    figsize=(15, 8),
+    show_plot=True,
+    save_path=output_dir / 'flood_probability_with_boundaries.png'
+)
+```
+
+### Geomorphological Feature Analysis
+
+The identification and characterization of key geomorphological features provide essential context for interpreting flood probability results. This analysis focuses on two critical landscape elements that significantly influence surface water dynamics: endorheic basins and drainage network classification.
+
+**Endorheic Basin Analysis:**
+Endorheic basins (closed drainage systems) represent areas where surface water accumulates without outlet to external drainage networks. These features are particularly significant for flood risk assessment as they indicate natural water retention areas and potential flooding hotspots.
+
+**Drainage Network Classification:**
+The hierarchical classification of drainage networks based on contributing area provides insights into the relative importance of different flow pathways and helps validate the EXZECO analysis results against established hydrological principles.
+
+```{python}
+#| label: spatial-features
+#| echo: true
+#| fig-cap: "Spatial features analysis including endorheic basins and drainage classification"
+
+importlib.reload(visualization) # just for development
+visualizer = ExzecoVisualizer(results, dem_path)
+
+# Perform comprehensive spatial features analysis
+spatial_figures = visualizer.plot_spatial_features_analysis(
+    analyzer=analyzer,
+    results=results,
+    figsize_endorheic=(10, 8),
+    figsize_drainage=(12, 8),
+    shapefile_gdf=study_gdf,
+    show_plots=True,
+    save_paths={
+        'endorheic': output_dir / 'endorheic_basins_analysis.png',
+        'drainage': output_dir / 'drainage_classification.png'
+    },
+    save_tiff=True
+)
+
+print(f"✅ Spatial features analysis completed")
+```
+
+## Interactive Visualizations {#sec-interactive}
+
+### Web-Based Interactive Mapping Technologies
+
+Interactive visualizations represent a paradigm shift in geospatial risk communication, enabling stakeholders to explore complex flood probability data through dynamic, user-controlled interfaces. These technologies leverage modern web mapping frameworks to provide real-time data exploration capabilities that static visualizations cannot achieve.
+
+**Interactive Mapping Advantages:**
+
+- **Multi-Scale Exploration**: Seamless zooming and panning across different spatial scales
+- **Layer Management**: Dynamic toggling of data layers for comparative analysis
+- **Attribute Interrogation**: Point-and-click access to detailed probability values
+- **Cross-Platform Compatibility**: Universal accessibility through web browsers
+
+The interactive mapping approach particularly benefits stakeholders who require detailed spatial analysis capabilities for decision-making processes, emergency planning, and risk communication activities.
+
+### Interactive Map
+
+```{python}
+#| label: interactive-map
+#| echo: true
+
+# Initialize visualizer
+import importlib
+import visualization
+importlib.reload(visualization)
+from visualization import ExzecoVisualizer
+
+visualizer = ExzecoVisualizer(results, dem_path)
+
+# Create interactive map
+print("Creating interactive map...")
+
+try:
+    # Create map with basic features first
+    interactive_map = visualizer.create_interactive_map(
+        noise_level='exzeco_200cm',
+        include_layers=[]  # Start with no additional layers
+    )
+    
+    # Create outputs directory
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Save map
+    interactive_map.save(str(output_dir / 'exzeco_map.html'))
+    print(f"✅ Interactive map saved to {output_dir / 'exzeco_map.html'}")
+    
+except Exception as e:
+    print(f"Error creating interactive map: {e}")
+    print("Creating a simple fallback map...")
+    
+    # Create a simple folium map as fallback
+    import folium
+    
+    # Get center coordinates
+    center_lat = (STUDY_BOUNDS[1] + STUDY_BOUNDS[3]) / 2
+    center_lon = (STUDY_BOUNDS[0] + STUDY_BOUNDS[2]) / 2
+    
+    # Create simple map
+    fallback_map = folium.Map(
+        location=[center_lat, center_lon],
+        zoom_start=12,
+        tiles='OpenStreetMap'
+    )
+    
+    # Add study area boundary
+    folium.Rectangle(
+        bounds=[[STUDY_BOUNDS[1], STUDY_BOUNDS[0]], 
+                [STUDY_BOUNDS[3], STUDY_BOUNDS[2]]],
+        color='red',
+        fill=True,
+        fillOpacity=0.1,
+        popup='Study Area'
+    ).add_to(fallback_map)
+    
+    fallback_map.save(str(output_dir / 'exzeco_map_simple.html'))
+    print(f"✅ Simple map saved to {output_dir / 'exzeco_map_simple.html'}")
+```
+
+### Three-Dimensional Terrain Visualization
+
+Three-dimensional visualization provides intuitive understanding of the relationship between topography and flood probability patterns. This approach leverages the human capacity for spatial reasoning with 3D representations, enabling stakeholders to better comprehend how terrain features influence surface water flow and accumulation patterns.
+
+**3D Visualization Benefits:**
+
+- **Topographic Context**: Clear visualization of elevation relationships and terrain features
+- **Flow Path Understanding**: Intuitive comprehension of gravity-driven water movement
+- **Risk Communication**: Enhanced stakeholder engagement through immersive visualization
+- **Educational Value**: Improved understanding of flood physics and terrain interactions
+
+The 3D visualization implementation uses modern WebGL technologies to provide smooth, interactive terrain exploration capabilities directly within web browsers, eliminating the need for specialized software or plugins.
+
+```{python}
+#| label: 3d-viz
+#| echo: true
+
+# Create 3D visualization
+print("Creating 3D visualization...")
+
+# Reload EXZECO and visualization module to get the fix
+import importlib
+import exzeco
+importlib.reload(exzeco)
+from exzeco import ExzecoAnalysis, ExzecoConfig, load_config
+importlib.reload(visualization)
+from visualization import ExzecoVisualizer
+visualizer = ExzecoVisualizer(results, dem_path)
+
+try:
+    fig_3d = visualizer.create_3d_visualization('exzeco_100cm')
+    
+    # Save 3D visualization
+    output_dir.mkdir(parents=True, exist_ok=True)
+    fig_3d.write_html(str(output_dir / 'exzeco_3d.html'))
+    print(f"✅ 3D visualization saved to {output_dir / 'exzeco_3d.html'}")
+    
+except Exception as e:
+    print(f"Error creating 3D visualization: {e}")
+```
+
+## Statistical Analysis {#sec-statistics}
+
+### Comparative Statistical Framework
+
+The statistical analysis of EXZECO results employs rigorous comparative methods to evaluate the sensitivity of flood probability predictions to varying levels of topographic uncertainty. This multi-level analysis provides insights into the stability and reliability of the flood risk assessment across different DEM noise scenarios.
+
+**Statistical Analysis Objectives:**
+
+- **Sensitivity Assessment**: Quantification of result variability across noise levels
+- **Uncertainty Propagation**: Understanding how input uncertainty affects output reliability
+- **Threshold Validation**: Statistical validation of probability threshold selection
+- **Spatial Pattern Analysis**: Evaluation of flood probability spatial coherence
+
+The comparative framework enables researchers and practitioners to assess the robustness of flood risk predictions and make informed decisions about appropriate uncertainty bounds for specific applications.
+
+### Comparison Analysis
+
+```{python}
+#| label: comparison-analysis
+#| echo: true
+
+# Create comparison plots
+print("Creating comparison analysis...")
+
+try:
+    fig_comparison = visualizer.create_comparison_plot()
+    
+    # Export the EXZECO Multi-Level Comparison plot
+    print("\n📊 Exporting EXZECO Multi-Level Comparison plot...")
+    
+    # Create outputs directory if it doesn't exist
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Save as HTML (interactive)
+    comparison_html_path = output_dir / "exzeco_multi_level_comparison.html"
+    fig_comparison.write_html(str(comparison_html_path))
+    print(f"✅ Multi-Level Comparison plot saved as HTML: {comparison_html_path}")
+    
+    # Save as PNG (static image) - requires kaleido
+    try:
+        comparison_png_path = output_dir / "exzeco_multi_level_comparison.png"
+        fig_comparison.write_image(str(comparison_png_path), width=1200, height=800, scale=2)
+        print(f"✅ Multi-Level Comparison plot saved as PNG: {comparison_png_path}")
+    except Exception as png_error:
+        print(f"⚠️  PNG export failed (requires kaleido package): {png_error}")
+        print("   HTML version saved successfully - you can open it in a browser")
+        
+    # Optional: Save as SVG (vector format)
+    try:
+        comparison_svg_path = output_dir / "exzeco_multi_level_comparison.svg"
+        fig_comparison.write_image(str(comparison_svg_path), format='svg', width=1200, height=800)
+        print(f"✅ Multi-Level Comparison plot saved as SVG: {comparison_svg_path}")
+    except Exception as svg_error:
+        print(f"⚠️  SVG export failed: {svg_error}")
+        
+except Exception as e:
+    print(f"Error creating comparison plot: {e}")
+```
+
+### Quantitative Results Synthesis
+
+The quantitative synthesis of EXZECO results provides essential metrics for understanding the magnitude and spatial distribution of flood risk across the study domain. This analysis generates summary statistics that facilitate comparison with other assessment methods and support evidence-based decision making.
+
+**Key Performance Indicators:**
+
+- **Spatial Coverage**: Percentage of study area affected by different probability thresholds
+- **Probability Distribution**: Statistical characterization of flood likelihood values
+- **Maximum Risk Areas**: Identification of highest probability flood zones
+- **Risk Gradient Analysis**: Spatial patterns of probability variation
+
+```{python}
+#| label: results-summary
+#| echo: true
+
+# Simple results summary
+print("\n" + "="*50)
+print("EXZECO ANALYSIS SUMMARY")
+print("="*50)
+
+for level, result in results.items():
+    prob_map = result['probability_map']
+    flooded_cells = np.sum(prob_map > 0.5)  # Cells with >50% flood probability
+    total_cells = prob_map.size
+    flooded_percentage = (flooded_cells / total_cells) * 100
+    
+    print(f"\n{level.replace('_', ' ').title()}:")
+    print(f"  - Flooded area (>50% probability): {flooded_percentage:.1f}%")
+    print(f"  - Max probability: {np.max(prob_map):.3f}")
+    print(f"  - Mean probability: {np.mean(prob_map):.3f}")
+
+print(f"\nAnalysis completed for study area: {STUDY_BOUNDS}")
+print(f"DEM resolution: {dem_data.shape}")
+print("="*50)
+```
+
+## Interactive Dashboard {#sec-dashboard}
+
+### Integrated Analysis Dashboard Development
+
+The interactive dashboard represents a sophisticated integration of multiple visualization components and analytical tools within a unified web-based interface. This approach addresses the growing need for comprehensive risk communication platforms that enable stakeholders to explore complex geospatial data through intuitive, user-friendly interfaces.
+
+**Dashboard Architecture:**
+
+- **Multi-Panel Layout**: Coordinated views of different analysis components
+- **Interactive Controls**: User-driven parameter adjustment and view customization  
+- **Data Integration**: Seamless linking between spatial and statistical representations
+- **Export Functionality**: Standardized output formats for further analysis and reporting
+
+The dashboard design follows principles of information visualization and human-computer interaction to ensure effective communication of flood risk information to both technical and non-technical audiences.
+
+```{python}
+#| label: dashboard
+#| echo: true
+
+# Create an interactive dashboard for exploring results.
+print("Creating interactive dashboard...")
+
+dashboard = visualizer.create_interactive_dashboard()
+
+# Export dashboard as HTML file
+from dashboard_exporter import export_dashboard
+
+# Export the dashboard with a single clean command
+export_info = export_dashboard(
+    dashboard=dashboard,
+    output_dir=output_dir,
+    filename="exzeco_interactive_dashboard.html",
+    study_bounds=STUDY_BOUNDS,
+    config=config,
+    title="EXZECO Interactive Dashboard"
+)
+
+print(f"📊 Dashboard export completed: {export_info['export_method']}")
+if export_info['success']:
+    print(f"✅ Dashboard saved: {export_info['html_path']}")
+    print(f"📂 File size: {export_info['file_size_kb']:.1f} KB")
+else:
+    print(f"⚠️ Export issues: {export_info.get('error', 'Unknown error')}")
+```
+
+## Detailed Statistical Analysis {#sec-detailed-stats}
+
+### Advanced Statistical Methods for Risk Quantification
+
+The detailed statistical analysis extends beyond basic descriptive statistics to implement advanced risk quantification methods that provide deeper insights into flood probability patterns and their implications for decision-making. This comprehensive approach employs multiple statistical frameworks to characterize uncertainty, validate results, and support evidence-based risk management.
+
+**Advanced Statistical Methods:**
+
+- **Risk Metrics Computation**: Standardized indicators for comparative assessment
+- **Significance Testing**: Statistical validation of risk detection capabilities
+- **Temporal Evolution Analysis**: Assessment of risk patterns across uncertainty levels
+- **Spatial Autocorrelation**: Evaluation of flood probability spatial clustering
+
+These methods collectively provide a rigorous foundation for interpreting EXZECO results and supporting their integration into broader risk assessment and management frameworks.
+
+### Individual Noise Level Analysis
+
+The systematic analysis of each noise level provides detailed insights into the sensitivity of flood probability predictions to varying levels of topographic uncertainty. This granular approach enables identification of stable risk patterns and assessment of prediction reliability across the uncertainty spectrum.
+
+```{python}
+#| label: individual-analysis
+#| echo: true
+
+# Reload modules for latest updates
+import importlib
+import visualization
+importlib.reload(visualization)
+from visualization import ExzecoVisualizer
+
+# Import risk metrics module
+import sys
+sys.path.append('../src')
+import risk_metrics
+importlib.reload(risk_metrics)
+from risk_metrics import (
+    compute_risk_metrics, 
+    create_risk_summary_dataframe,
+    analyze_risk_evolution,
+    check_risk_significance,
+    create_risk_visualization,
+    export_risk_analysis
+)
+
+# Statistical analysis - Individual analysis for each noise level
+print("📊 Generating individual statistical analysis for each noise level...")
+print(f"   • Configuration: {config.iterations:,} iterations, {config.min_drainage_area} km² drainage threshold")
+print("")
+
+# Create a visualizer for the statistical analysis
+visualizer = ExzecoVisualizer(results, dem_path=dem_path)
+
+for level in results.keys():
+    print(f"Analyzing {level}...")
+    # Include config parameter and enable file saving with output directory
+    visualizer.plot_statistics(
+        noise_level=level, 
+        config=config,  # Include config to show iterations and drainage threshold
+        save_files=True,  # Enable file saving 
+        output_dir=output_dir  # Save to outputs directory
+    )
+
+print(f"\n✅ Statistical analysis completed for {len(results)} noise levels")
+print(f"📁 Individual analysis files saved to: {output_dir}")
+```
+
+### Comprehensive Risk Assessment
+
+The comprehensive risk assessment integrates results from all noise levels to provide a holistic evaluation of flood risk patterns and their statistical properties. This analysis employs standardized risk metrics that facilitate comparison across different study areas and assessment scenarios.
+
+```{python}
+#| label: risk-assessment
+#| echo: true
+
+# Comprehensive risk assessment using risk_metrics module
+print(f"\n{'='*60}")
+print("COMPREHENSIVE RISK ASSESSMENT")
+print('='*60)
+
+# Compute detailed risk metrics for all noise levels
+print("Computing comprehensive risk metrics...")
+risk_data = compute_risk_metrics(results, analyzer)
+
+# Create structured risk summary DataFrame
+risk_df = create_risk_summary_dataframe(risk_data)
+
+# Display the risk summary
+print("\n📊 Risk Assessment Summary:")
+print(risk_df)
+```
+
+### Risk Significance Analysis
+
+Statistical significance testing provides objective criteria for evaluating whether the identified flood risk patterns represent meaningful hazard indicators or may be attributed to methodological uncertainty. This analysis is particularly important for preliminary assessments where validation data may be limited.
+
+```{python}
+#| label: risk-significance
+#| echo: true
+
+# Risk significance analysis
+print(f"\n{'='*40}")
+print("RISK SIGNIFICANCE ANALYSIS")
+print('='*40)
+
+significance = check_risk_significance(risk_data, min_threshold=0.01)
+
+if significance['has_significant_risk']:
+    print("✅ SIGNIFICANT FLOOD RISK DETECTED")
+    print(f"   • Maximum flood area: {significance['max_flood_area_km2']:.3f} km²")
+    print(f"   • Maximum critical risk area: {significance['max_critical_area_km2']:.3f} km²")
+    print(f"   • Significant risk levels: {len(significance['significant_levels'])}/{len(results)}")
+    print(f"   • Recommendation: {significance['recommendation'].replace('_', ' ').title()}")
+else:
+    print("⚠️  NO SIGNIFICANT FLOOD RISK DETECTED")
+    print(f"   • Maximum flood area: {significance['max_flood_area_km2']:.6f} km²")
+    print(f"   • Threshold used: {significance['threshold_used']} km²")
+    print(f"   • Recommendation: {significance['recommendation'].replace('_', ' ').title()}")
+    print("\n   Possible reasons:")
+    for reason in significance['possible_reasons']:
+        print(f"     - {reason}")
+```
+
+### Risk Evolution Analysis
+
+The analysis of risk evolution across uncertainty levels provides insights into the stability and predictability of flood risk patterns. This temporal analysis (across the uncertainty spectrum) helps identify robust risk indicators and assess the sensitivity of conclusions to methodological parameters.
+
+```{python}
+#| label: risk-evolution
+#| echo: true
+
+# Risk evolution analysis (if multiple noise levels)
+if len(results) > 1:
+    print(f"\n{'='*40}")
+    print("RISK EVOLUTION ANALYSIS")
+    print('='*40)
+    
+    evolution = analyze_risk_evolution(risk_data)
+    
+    if evolution['has_evolution']:
+        print("📈 Risk Evolution Trends:")
+        for metric, trend in evolution['trends'].items():
+            change_value = evolution['changes'][metric.replace('_trend', '_change')]
+            print(f"   • {metric.replace('_', ' ').title()}: {trend} (Δ {change_value:+.3f})")
+        
+        print(f"\n📊 Noise Level Progression:")
+        for i, (level, noise_val) in enumerate(zip(evolution['sorted_levels'], evolution['noise_values'])):
+            flood_area = evolution['values']['flood_areas'][i]
+            print(f"   {i+1}. {level}: {noise_val:.1f}m → {flood_area:.3f} km² flood area")
+```
+
+### Risk Visualization
+
+The comprehensive risk visualization synthesizes multiple statistical perspectives into integrated graphical representations that facilitate understanding of complex risk patterns and their uncertainties.
+
+```{python}
+#| label: risk-viz
+#| echo: true
+#| fig-cap: "Comprehensive risk analysis visualization"
+
+# Create comprehensive risk visualization
+print(f"\n{'='*40}")
+print("GENERATING RISK VISUALIZATIONS")
+print('='*40)
+
+try:
+    # Create comprehensive risk visualization
+    risk_fig = create_risk_visualization(
+        risk_df=risk_df,
+        risk_data=risk_data,
+        figsize=(15, 10),
+        save_path=output_dir / 'comprehensive_risk_analysis.png'
+    )
+    plt.show()
+    print("✅ Risk visualization created and saved")
+    
+except Exception as e:
+    print(f"⚠️  Error creating risk visualization: {e}")
+```
+
+### Export Risk Analysis Results
+
+The standardized export of risk analysis results ensures compatibility with external analysis tools and supports integration into broader risk assessment workflows. Multiple export formats accommodate different analytical requirements and institutional preferences.
+
+```{python}
+#| label: risk-export
+#| echo: true
+
+# Export risk analysis results
+print(f"\n{'='*40}")
+print("EXPORTING RISK ANALYSIS RESULTS")
+print('='*40)
+
+export_result = export_risk_analysis(
+    risk_df=risk_df,
+    risk_data=risk_data,
+    output_dir=output_dir,
+    config=config,
+    formats=['csv', 'excel', 'json']
+)
+
+if export_result['success']:
+    print("✅ Risk analysis results exported successfully:")
+    for format_type, file_path in export_result['exported_files'].items():
+        print(f"   • {format_type.upper()}: {file_path.name}")
+else:
+    print(f"❌ Export failed: {export_result.get('error', 'Unknown error')}")
+
+print(f"\n✅ Comprehensive statistical analysis completed for {len(results)} noise levels")
+print(f"📂 All analysis files saved to: {output_dir}")
+print(f"🔧 Analysis used {config.iterations:,} iterations with {config.min_drainage_area} km² drainage threshold")
+```
+
+## Export Results {#sec-export}
+
+```{python}
+#| label: export-results
+#| echo: true
+
+# Export analysis results in various formats with descriptive naming convention.
+# New naming format: {file_type}_{noise_level_cm}_{iterations}_{drainage_threshold_km2}.{extension}
+
+# Import the export function from our dedicated export module
+import sys
+sys.path.append('../src')  # Add src directory to path
+from export import export_exzeco_results
+
+# Export all results using the dedicated export function
+export_info = export_exzeco_results(
+    analyzer=analyzer,
+    results=results,
+    dem_path=dem_path,
+    output_dir=output_dir,
+    report=report,
+    risk_df=risk_df,
+    study_bounds=STUDY_BOUNDS,
+    dem_data=dem_data
+)
+
+# Display export summary
+if export_info['success']:
+    print(f"\n🎉 Export completed successfully!")
+    print(f"   • Total files exported: {export_info['total_files']}")
+    print(f"   • Total size: {export_info['total_size_mb']:.1f} MB")
+    print(f"   • Files with descriptive naming: {len(export_info['descriptive_files'])}")
+    
+    if export_info['errors']:
+        print(f"\n⚠️  Warnings/Errors encountered:")
+        for error in export_info['errors']:
+            print(f"   • {error}")
+else:
+    print(f"\n❌ Export failed with errors:")
+    for error in export_info['errors']:
+        print(f"   • {error}")
+```
+
+## Create Final Report {#sec-final-report}
+
+```{python}
+#| label: final-report
+#| echo: true
+
+# Generate a comprehensive HTML report using the dedicated script.
+
+# Import the final report generation function
+import sys
+sys.path.append('../src')  # Add src directory to path
+from write_final_report import write_final_report
+
+# Generate the final HTML report using the dedicated script
+report_result = write_final_report(
+    risk_df=risk_df,
+    study_bounds=STUDY_BOUNDS,
+    area_km2=area_km2,
+    dem_stats=dem_stats,
+    config=config,
+    output_dir=output_dir,
+    filename='exzeco_final_report.html'
+)
+
+# Display results
+if report_result['success']:
+    print(f"✅ {report_result['message']}")
+    print(f"📁 File size: {report_result['file_size_kb']:.1f} KB")
+else:
+    print(f"❌ Failed to generate report: {report_result['error']}")
+```
+
+## Conclusion {#sec-conclusion}
+
+```{python}
+#| label: conclusion
+#| echo: true
+
+# Save notebook state
+print("\n" + "="*60)
+print("EXZECO Analysis Complete!")
+print("="*60)
+print(f"\nAll results saved to: {output_dir.absolute()}")
+print("\nSummary of Outputs:")
+print("1. **Raster Results**: GeoTIFF files with flood probability maps for each noise level")
+print("2. **Vector Results**: Shapefiles/GeoJSON with flood zones")
+print("3. **Interactive Map**: HTML map with multiple layers")
+print("4. **3D Visualization**: Interactive 3D terrain with flood zones")
+print("5. **Statistical Reports**: CSV/Excel files with detailed statistics")
+print("6. **Visualizations**: PNG/HTML charts and graphs")
+
+print("\nNext Steps:")
+print("1. Review the interactive map to identify critical flood zones")
+print("2. Examine the statistical reports for risk quantification")
+print("3. Use the vector outputs for further GIS analysis")
+print("4. Share the HTML report with stakeholders")
+
+print("\nImportant Notes:")
+print("- This is a preliminary assessment based on topography only")
+print("- Results should be validated with field observations and historical flood data")
+print("- For detailed planning, complement with hydraulic modeling")
+print("- Consider local infrastructure and drainage systems not captured in the DEM")
+
+print("\nThank you for using the EXZECO Flood Risk Assessment Tool!")
+```
+
+---
+
+::: {.callout-tip}
+## Rendering this Notebook
+
+To render this Quarto notebook, use one of the following commands:
+
+```bash
+# Render to HTML
+quarto render exzeco_pfra_quarto_nb.qmd --to html
+
+# Render to PDF (requires LaTeX)
+quarto render exzeco_pfra_quarto_nb.qmd --to pdf
+
+# Render and preview
+quarto preview exzeco_pfra_quarto_nb.qmd
+```
+:::
+
+::: {.callout-note}
+## Output Files
+
+All analysis outputs are saved to `../data/outputs/` directory:
+
+- **Raster outputs**: GeoTIFF files with flood probability maps
+- **Vector outputs**: Shapefiles with flood zones and risk classifications  
+- **Interactive outputs**: HTML maps, 3D visualizations, and dashboards
+- **Reports**: Comprehensive HTML reports and statistical summaries
+- **Visualizations**: High-resolution plots and charts
+:::
