@@ -12,11 +12,13 @@ This checklist identifies potential improvements for the EXZECO flood risk asses
   - Prevents proper package installation with `pip install -e .`
   - **Priority: HIGH**
 
-- [ ] **Version inconsistencies between `requirements.txt` and `environment.yml`**
-  - Plotly: requirements.txt specifies `>=6.3.0` but environment.yml has `=5.17.*`
-  - Kaleido: requirements.txt has `>=1.0.0` but environment.yml has `>=0.2.0`
-  - Creates potential compatibility issues for static image export
-  - **Priority: HIGH**
+- [x] **Version inconsistencies between `requirements.txt` and `environment.yml`**
+  - ✅ RESOLVED: Plotly version updated from 5.17.* to >=6.3.0 in environment.yml
+  - ✅ RESOLVED: Kaleido version updated from >=0.2.0 to >=1.0.0 in environment.yml
+  - ✅ RESOLVED: Added missing narwhals>=2.3.0 dependency to environment.yml
+  - ✅ RESOLVED: Harmonized version specification style to use >= consistently
+  - Both files now use compatible versions for static image export
+  - **Status: COMPLETED**
 
 ### 2. Code Architecture and Structure
 
