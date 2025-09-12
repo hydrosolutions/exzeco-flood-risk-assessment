@@ -4,6 +4,9 @@ data/outputs/
 # DEM cache directories
 data/dem/elevation_cache/
 
+# DOI data files (shapefiles, geopackages)
+data/doi/
+
 # Python cache
 __pycache__/
 *.pyc
