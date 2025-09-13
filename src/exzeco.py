@@ -37,6 +37,16 @@ from pathlib import Path
 import yaml
 import logging
 
+# Import new core modules
+from .core import (
+    FlowAnalyzer,
+    MonteCarloSimulator,
+    GeometryProcessor,
+    DrainageClassifier,
+    ClassificationThresholds,
+    ResultExporter
+)
+
 # Configure logging
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -87,7 +97,27 @@ class ExzecoAnalysis:
         if self.config.seed is not None:
             np.random.seed(self.config.seed)
         
-        # Flow direction encoding (D8 algorithm)
+        # Initialize core modules using composition pattern
+        self.flow_analyzer = FlowAnalyzer()
+        self.geometry_processor = GeometryProcessor()
+        
+        # Classification thresholds based on config
+        classification_thresholds = ClassificationThresholds(
+            very_low=0.001,
+            low=0.01,
+            medium=0.1,
+            high=1.0,
+            very_high=10.0
+        )
+        self.drainage_classifier = DrainageClassifier(classification_thresholds)
+        
+        # Monte Carlo simulator will be initialized with flow analyzer
+        self.monte_carlo_simulator = MonteCarloSimulator(self.flow_analyzer)
+        
+        # Result exporter will be initialized when output directory is known
+        self.result_exporter: Optional[ResultExporter] = None
+        
+        # Flow direction encoding (D8 algorithm) - kept for backward compatibility
         self.flow_directions = {
             1: (0, 1),    # East
             2: (1, 1),    # Southeast
@@ -131,50 +161,36 @@ class ExzecoAnalysis:
         ValueError
             If neither shapefile nor bounds are provided or valid
         """
-        # Try shapefile first
+        # Try shapefile first using GeometryProcessor
         if shapefile_path is not None:
-            shapefile_path = Path(shapefile_path)
-            if shapefile_path.exists():
-                try:
-                    logger.info(f"Loading study areas from {shapefile_path}")
-                    gdf = gpd.read_file(shapefile_path)
-                    
-                    if len(gdf) == 0:
-                        raise ValueError("Shapefile contains no features")
-                    
-                    # Ensure geometries are valid
-                    gdf = gdf[gdf.geometry.is_valid]
-                    
-                    if len(gdf) == 0:
-                        raise ValueError("Shapefile contains no valid geometries")
-                    
-                    # Store individual subcatchments and total area
-                    self.study_areas = gdf
-                    
-                    # Create dissolved geometry for total study area
-                    total_geom = gdf.geometry.unary_union
-                    if hasattr(total_geom, 'geoms'):
-                        # If it's a MultiPolygon, keep as is
-                        from shapely.geometry import MultiPolygon
-                        if not isinstance(total_geom, MultiPolygon):
-                            total_geom = MultiPolygon([total_geom])
-                    
-                    total_gdf = gpd.GeoDataFrame([{'name': 'total_domain'}], 
-                                               geometry=[total_geom], 
-                                               crs=gdf.crs)
-                    self.total_study_area = total_gdf
-                    
-                    total_bounds = gdf.total_bounds
-                    
-                    logger.info(f"Loaded {len(gdf)} subcatchments from shapefile")
-                    logger.info(f"Total study area bounds: {total_bounds}")
-                    
-                    return gdf, tuple(total_bounds)
-                    
-                except Exception as e:
-                    logger.warning(f"Failed to load shapefile {shapefile_path}: {e}")
-            else:
-                logger.warning(f"Shapefile not found: {shapefile_path}")
+            try:
+                gdf = self.geometry_processor.load_study_area(shapefile_path)
+                
+                # Store individual subcatchments
+                self.study_areas = gdf
+                
+                # Create total study area (dissolved geometry)
+                total_geom = gdf.geometry.unary_union
+                if hasattr(total_geom, 'geoms'):
+                    # If it's a MultiPolygon, keep as is
+                    from shapely.geometry import MultiPolygon
+                    if not isinstance(total_geom, MultiPolygon):
+                        total_geom = MultiPolygon([total_geom])
+                
+                total_gdf = gpd.GeoDataFrame([{'name': 'total_domain'}], 
+                                           geometry=[total_geom], 
+                                           crs=gdf.crs)
+                self.total_study_area = total_gdf
+                
+                total_bounds = self.geometry_processor.get_bbox(gdf)
+                
+                logger.info(f"Loaded {len(gdf)} subcatchments from shapefile")
+                logger.info(f"Total study area bounds: {total_bounds}")
+                
+                return gdf, total_bounds
+                
+            except Exception as e:
+                logger.warning(f"Failed to load shapefile {shapefile_path}: {e}")
         
         # Fall back to bounding box
         if bounds is not None and len(bounds) == 4:
@@ -312,8 +328,8 @@ class ExzecoAnalysis:
         # Handle nodata values
         dem = np.where(dem < -9999, np.nan, dem)
         
-        # Fill pits (essential for flow routing)
-        dem_filled = self._fill_pits(dem)
+        # Fill pits (essential for flow routing) - use FlowAnalyzer
+        dem_filled = self.flow_analyzer.fill_pits(dem)
         
         self.dem_data = dem_filled
         self.shape = dem_filled.shape
@@ -573,24 +589,14 @@ class ExzecoAnalysis:
         np.ndarray
             Binary flood zone mask for this iteration
         """
-        # Add noise to DEM
-        dem_noisy = self._add_noise(self.dem_data, noise_level)
-        
-        # Compute flow direction
-        flow_dir, _ = self._compute_flow_direction_d8(dem_noisy)
-        
-        # Compute flow accumulation
-        flow_acc = self._compute_flow_accumulation(flow_dir)
-        
-        # FIX: Convert to drainage area using correct pixel area calculation
-        pixel_area_m2 = self.resolution_x * self.resolution_y  # Area in m²
-        pixel_area_km2 = pixel_area_m2 / 1e6  # Convert to km²
-        drainage_area = flow_acc * pixel_area_km2
-        
-        # Create binary mask for areas above threshold
-        mask = drainage_area >= self.config.min_drainage_area
-        
-        return mask.astype(np.float32)
+        # Use MonteCarloSimulator for single iteration
+        return self.monte_carlo_simulator.single_iteration(
+            self.dem_data, 
+            noise_level,
+            self.config.min_drainage_area,
+            self.resolution_x,
+            self.resolution_y
+        )
     
     def run_monte_carlo(self, noise_level: float, progress_bar: bool = True) -> np.ndarray:
         """
@@ -608,31 +614,17 @@ class ExzecoAnalysis:
         np.ndarray
             Probability map (0-1) of flood zones
         """
-        logger.info(f"Running Monte Carlo for noise level {noise_level}m with {self.config.iterations} iterations")
-        
-        # Parallel execution
-        if self.config.n_jobs != 1:
-            iterator = tqdm(range(self.config.iterations), desc=f"MC {noise_level}m") if progress_bar else range(self.config.iterations)
-            
-            results = Parallel(n_jobs=self.config.n_jobs)(
-                delayed(self._single_iteration)(noise_level) for _ in iterator
-            )
-            
-            # Aggregate results
-            probability_map = np.mean(results, axis=0)
-        else:
-            # Sequential execution
-            probability_map = np.zeros(self.shape, dtype=np.float32)
-            
-            iterator = tqdm(range(self.config.iterations), desc=f"MC {noise_level}m") if progress_bar else range(self.config.iterations)
-            
-            for _ in iterator:
-                mask = self._single_iteration(noise_level)
-                probability_map += mask
-            
-            probability_map /= self.config.iterations
-        
-        return probability_map
+        # Use MonteCarloSimulator for full simulation
+        return self.monte_carlo_simulator.run_simulation(
+            self.dem_data,
+            noise_level,
+            self.config.iterations,
+            self.config.min_drainage_area,
+            self.resolution_x,
+            self.resolution_y,
+            self.config.n_jobs,
+            progress_bar
+        )
     
     def run_full_analysis(self, 
                          dem_path: Union[str, Path], 
@@ -739,29 +731,17 @@ class ExzecoAnalysis:
         np.ndarray
             Classified drainage areas
         """
-        # Compute flow accumulation for original DEM
-        flow_dir, _ = self._compute_flow_direction_d8(self.dem_data)
-        flow_acc = self._compute_flow_accumulation(flow_dir)
+        # Compute flow accumulation for original DEM using FlowAnalyzer
+        flow_dir, _ = self.flow_analyzer.compute_flow_direction(self.dem_data)
+        flow_acc = self.flow_analyzer.compute_flow_accumulation(flow_dir, self.dem_data)
         
-        # FIX: Convert to drainage area using correct pixel area
+        # Convert to drainage area using correct pixel area
         pixel_area_m2 = self.resolution_x * self.resolution_y
         pixel_area_km2 = pixel_area_m2 / 1e6
         drainage_area = flow_acc * pixel_area_km2
         
-        # Create classified array
-        classified = np.zeros_like(drainage_area, dtype=np.int8)
-        
-        # Apply probability threshold
-        flood_mask = prob_map > 0.5
-        
-        # Classify by drainage area
-        for i, threshold in enumerate(self.config.drainage_classes):
-            if i == 0:
-                mask = (drainage_area >= threshold) & flood_mask
-            else:
-                mask = (drainage_area >= threshold) & (drainage_area < self.config.drainage_classes[i-1]) & flood_mask
-            
-            classified[mask] = i + 1
+        # Use DrainageClassifier for classification
+        classified = self.drainage_classifier.classify_drainage_areas(drainage_area, prob_map)
         
         return classified
     
