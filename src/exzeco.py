@@ -606,6 +606,46 @@ class ExzecoAnalysis:
             progress_bar
         )
     
+    def compute_flow_direction(self, dem: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Compute D8 flow direction and slopes.
+        
+        Public wrapper for flow analysis functionality needed by notebooks.
+        
+        Parameters
+        ----------
+        dem : np.ndarray
+            Digital elevation model
+            
+        Returns
+        -------
+        Tuple[np.ndarray, np.ndarray]
+            Flow direction grid and slope grid
+        """
+        return self.flow_analyzer.compute_flow_direction(dem)
+    
+    def compute_flow_accumulation(self, flow_dir: np.ndarray, dem_data: Optional[np.ndarray] = None) -> np.ndarray:
+        """
+        Compute flow accumulation from flow direction.
+        
+        Public wrapper for flow analysis functionality needed by notebooks.
+        
+        Parameters
+        ----------
+        flow_dir : np.ndarray
+            Flow direction grid
+        dem_data : np.ndarray, optional
+            DEM data for masking. If None, uses self.dem_data
+            
+        Returns
+        -------
+        np.ndarray
+            Flow accumulation grid
+        """
+        if dem_data is None:
+            dem_data = self.dem_data
+        return self.flow_analyzer.compute_flow_accumulation(flow_dir, dem_data)
+    
     def run_full_analysis(self, 
                          dem_path: Union[str, Path], 
                          bounds: Optional[Tuple] = None,

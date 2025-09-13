@@ -501,8 +501,8 @@ temp_analyzer = ExzecoAnalysis(temp_config)
 temp_analyzer.load_dem(dem_path)
 
 # Calculate flow accumulation for original DEM
-flow_dir, slopes = temp_analyzer._compute_flow_direction_d8(temp_analyzer.dem_data)
-flow_acc = temp_analyzer._compute_flow_accumulation(flow_dir)
+flow_dir, slopes = temp_analyzer.compute_flow_direction(temp_analyzer.dem_data)
+flow_acc = temp_analyzer.compute_flow_accumulation(flow_dir)
 
 # Convert to drainage area
 pixel_area_km2 = (temp_analyzer.resolution_x * temp_analyzer.resolution_y) / 1e6

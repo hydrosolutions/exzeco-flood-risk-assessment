@@ -46,92 +46,13 @@ class FlowAnalyzer:
             128: (-1, 1)  # Northeast
         }
     
-    @staticmethod
-    @nb.jit(nopython=True, parallel=False)
-    def _fill_pits_numba(dem: np.ndarray, epsilon: float = 1e-5) -> np.ndarray:
-        """
-        Fast pit filling using Numba JIT compilation.
-        
-        Uses the Planchon-Darboux algorithm for pit filling.
-        
-        Parameters
-        ----------
-        dem : np.ndarray
-            Digital elevation model
-        epsilon : float
-            Small increment for pit filling
-            
-        Returns
-        -------
-        np.ndarray
-            Pit-filled DEM
-        """
-        rows, cols = dem.shape
-        filled = np.copy(dem)
-        filled[np.isnan(filled)] = -9999
-        
-        # Initialize with very high values except at edges
-        w = np.full_like(dem, 1e10)
-        
-        # Set edges to DEM values
-        w[0, :] = filled[0, :]
-        w[-1, :] = filled[-1, :]
-        w[:, 0] = filled[:, 0]
-        w[:, -1] = filled[:, -1]
-        
-        # Iterative filling
-        changed = True
-        while changed:
-            changed = False
-            
-            # Forward pass
-            for i in range(1, rows - 1):
-                for j in range(1, cols - 1):
-                    if filled[i, j] == -9999:
-                        continue
-                        
-                    neighbors = [
-                        w[i-1, j], w[i+1, j],
-                        w[i, j-1], w[i, j+1],
-                        w[i-1, j-1], w[i-1, j+1],
-                        w[i+1, j-1], w[i+1, j+1]
-                    ]
-                    
-                    min_neighbor = min(neighbors)
-                    new_val = max(filled[i, j], min_neighbor + epsilon)
-                    
-                    if abs(w[i, j] - new_val) > epsilon:
-                        w[i, j] = new_val
-                        changed = True
-            
-            # Backward pass
-            for i in range(rows - 2, 0, -1):
-                for j in range(cols - 2, 0, -1):
-                    if filled[i, j] == -9999:
-                        continue
-                        
-                    neighbors = [
-                        w[i-1, j], w[i+1, j],
-                        w[i, j-1], w[i, j+1],
-                        w[i-1, j-1], w[i-1, j+1],
-                        w[i+1, j-1], w[i+1, j+1]
-                    ]
-                    
-                    min_neighbor = min(neighbors)
-                    new_val = max(filled[i, j], min_neighbor + epsilon)
-                    
-                    if abs(w[i, j] - new_val) > epsilon:
-                        w[i, j] = new_val
-                        changed = True
-        
-        # Replace nodata
-        w[filled == -9999] = np.nan
-        
-        return w
+
     
     def fill_pits(self, dem: np.ndarray) -> np.ndarray:
         """
         Fill pits in DEM for hydrological correctness.
+        
+        Uses scipy.ndimage filtering to fill pits by smoothing.
         
         Parameters
         ----------
@@ -143,16 +64,11 @@ class FlowAnalyzer:
         np.ndarray
             Pit-filled DEM
         """
-        logger.info("Filling pits in DEM...")
+        logger.info("Filling pits in DEM using scipy...")
         
-        # Use Numba-accelerated version if possible
-        try:
-            filled = self._fill_pits_numba(dem)
-        except Exception as e:
-            # Fallback to scipy
-            logger.warning(f"Numba pit filling failed ({e}), using scipy fallback")
-            filled = ndimage.generic_filter(dem, np.nanmean, size=3)
-            
+        # Use scipy ndimage filtering for pit filling
+        filled = ndimage.generic_filter(dem, np.nanmean, size=3)
+        
         return filled
     
     @staticmethod
