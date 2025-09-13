@@ -38,7 +38,7 @@ import yaml
 import logging
 
 # Import new core modules
-from .core import (
+from core import (
     FlowAnalyzer,
     MonteCarloSimulator,
     GeometryProcessor,
@@ -231,35 +231,15 @@ class ExzecoAnalysis:
         np.ndarray
             Masked raster array
         """
-        from rasterio.mask import mask
-        from shapely.geometry import mapping
+        # Create GeoDataFrame from geometry
+        gdf = gpd.GeoDataFrame([{'id': 1}], geometry=[geometry], crs=self.crs)
         
-        # Create a temporary raster to work with
-        masked_data = raster.copy()
+        # Use GeometryProcessor to clip raster
+        clipped_raster, _ = self.geometry_processor.clip_raster_to_geometry(
+            raster, transform, gdf, nodata_value=np.nan
+        )
         
-        # Use rasterio.mask to mask the data
-        try:
-            # Convert geometry to GeoJSON-like format
-            geom_dict = mapping(geometry)
-            
-            # Create mask - True for pixels inside geometry
-            mask_array = features.rasterize(
-                [geom_dict],
-                out_shape=raster.shape,
-                transform=transform,
-                fill=0,
-                default_value=1,
-                dtype=np.uint8
-            ).astype(bool)
-            
-            # Apply mask - set pixels outside geometry to NaN
-            masked_data[~mask_array] = np.nan
-            
-            return masked_data
-            
-        except Exception as e:
-            logger.warning(f"Failed to mask raster: {e}")
-            return raster
+        return clipped_raster
     
     
         
@@ -668,9 +648,9 @@ class ExzecoAnalysis:
             
             # Apply incremental DEM modification for next level
             if noise_level < self.config.noise_levels[-1]:
-                # Modify DEM for areas with high flow accumulation
-                flow_dir, _ = self._compute_flow_direction_d8(self.dem_data)
-                flow_acc = self._compute_flow_accumulation(flow_dir)
+                # Modify DEM for areas with high flow accumulation using FlowAnalyzer
+                flow_dir, _ = self.flow_analyzer.compute_flow_direction(self.dem_data)
+                flow_acc = self.flow_analyzer.compute_flow_accumulation(flow_dir, self.dem_data)
                 
                 # FIX: Use correct pixel area calculation
                 pixel_area_m2 = self.resolution_x * self.resolution_y
