@@ -183,6 +183,12 @@ This checklist identifies potential improvements for the EXZECO flood risk asses
   - No centralized theme management
   - **Priority: LOW**
 
+- [ ] **Static map plot layout issues**
+  - Statistics box positioning overlaps with map content
+  - Stats box needs repositioning for better readability
+  - Fixed positioning doesn't adapt to different map sizes
+  - **Priority: LOW**
+
 ### 14. Export and Compatibility
 
 - [ ] **Limited export format support**
