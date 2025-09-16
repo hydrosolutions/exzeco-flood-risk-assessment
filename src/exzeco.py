@@ -38,7 +38,7 @@ import yaml
 import logging
 
 # Import new core modules
-from core import (
+from .core import (
     FlowAnalyzer,
     MonteCarloSimulator,
     GeometryProcessor,
