@@ -226,6 +226,37 @@ print(f"  Noise levels: {config.noise_levels}")
 print(f"  Iterations: {config.iterations}")
 print(f"  Min drainage area: {config.min_drainage_area} km²")
 print(f"  Parallel jobs: {config.n_jobs}")
+
+# Validate DEM conditioning configuration
+dem_config = config.get('dem', {})
+use_hydrocorrected = dem_config.get('use_hydrocorrected', True)
+conditioning_config = dem_config.get('conditioning', {})
+conditioning_algorithm = conditioning_config.get('algorithm', 'auto')
+
+print(f"\nDEM Configuration:")
+print(f"  Use hydrocorrected DEM: {use_hydrocorrected}")
+print(f"  Conditioning algorithm: {conditioning_algorithm}")
+
+# Validate algorithm choice
+valid_algorithms = ['auto', 'wang_liu', 'priority_flood']
+if conditioning_algorithm not in valid_algorithms:
+    print(f"⚠️  Warning: Invalid algorithm '{conditioning_algorithm}'. Valid options: {valid_algorithms}")
+    print(f"   Defaulting to 'auto' selection")
+    conditioning_algorithm = 'auto'
+
+# Performance warnings
+if use_hydrocorrected:
+    print(f"\n💡 Hydrological Conditioning Notes:")
+    print(f"   • Large DEMs may take several minutes to process")
+    print(f"   • Algorithm selection: {conditioning_algorithm}")
+    if conditioning_algorithm == 'wang_liu':
+        print(f"   • Wang & Liu: More robust for large DEMs, slower processing")
+    elif conditioning_algorithm == 'priority_flood':
+        print(f"   • Priority-flood: Faster for small DEMs, memory intensive")
+    else:
+        print(f"   • Auto: Optimal algorithm selected based on DEM size")
+else:
+    print(f"\n💡 Note: Original DEM will be used without hydrological conditioning")
 ```
 
 ## Define Study Area {#sec-study-area}
@@ -456,6 +487,168 @@ dem_fig = create_dem_visualization(
 )
 ```
 
+## Hydrological Conditioning {#sec-hydro-conditioning}
+
+### Wang & Liu Algorithm for DEM Preprocessing
+
+Digital Elevation Models often contain artificial depressions (pits) that result from data collection limitations, interpolation artifacts, or rounding errors. These depressions can significantly impact hydrological modeling by creating unrealistic sinks that block natural flow routing. The Wang & Liu (2006) algorithm provides an efficient and robust solution for removing these artifacts while preserving the overall topographic characteristics of the landscape.
+
+**Hydrological Conditioning Benefits:**
+
+- **Flow Connectivity**: Ensures continuous flow paths from ridges to outlets
+- **Realistic Drainage Networks**: Eliminates artificial flow terminations
+- **Improved Flow Accumulation**: More accurate calculation of upstream contributing areas
+- **Enhanced Flood Modeling**: Better representation of surface water flow patterns
+
+The Wang & Liu algorithm is an improved version of the priority-flood approach that uses a two-pass scanning method for enhanced computational efficiency. This preprocessing step is essential for generating hydrologically correct DEMs that will produce more accurate EXZECO flood risk assessments.
+
+```{python}
+#| label: hydro-conditioning
+#| echo: true
+#| fig-cap: "Hydrological conditioning using optimized pit-filling algorithms"
+
+# Ensure proper imports for hydrological conditioning
+import importlib
+import sys
+from pathlib import Path
+
+print("🌊 HYDROLOGICAL CONDITIONING (CONFIGURATION-DRIVEN)")
+print("=" * 60)
+
+# Read configuration settings for DEM conditioning
+use_hydrocorrected = config.get('use_hydrocorrected', True)
+conditioning_config = config.get('conditioning', {})
+algorithm = conditioning_config.get('algorithm', 'auto')
+overwrite = conditioning_config.get('overwrite', False)
+
+print(f"📋 Configuration Settings:")
+print(f"   • Use hydrologically corrected DEM: {use_hydrocorrected}")
+print(f"   • Algorithm: {algorithm}")
+print(f"   • Overwrite existing: {overwrite}")
+print("")
+
+if use_hydrocorrected:
+    print("📊 Algorithm auto-selection based on DEM size:")
+    print("   • Small DEMs (<1M cells): Priority-flood (fast)")
+    print("   • Large DEMs (≥1M cells): Wang & Liu (robust)")
+    print("")
+    
+    # Try to import HydrologicalCorrector with multiple fallback approaches
+    try:
+        # First, try direct import (should work if src is already in path)
+        import dem_utils
+        importlib.reload(dem_utils)
+        from dem_utils import HydrologicalCorrector
+        print("✅ Successfully imported HydrologicalCorrector")
+        
+    except ImportError as e:
+        print(f"❌ Import error: {e}")
+        print("🔄 Trying alternative import approach...")
+        
+        try:
+            # Alternative: ensure src directory is in path and try again
+            src_dir = Path("../src").resolve()
+            if str(src_dir) not in sys.path:
+                sys.path.insert(0, str(src_dir))
+            
+            import dem_utils
+            importlib.reload(dem_utils)
+            from dem_utils import HydrologicalCorrector
+            print("✅ Successfully imported HydrologicalCorrector (alternative method)")
+            
+        except ImportError as e2:
+            print(f"❌ Alternative import also failed: {e2}")
+            print("🔄 Falling back to original DEM - conditioning disabled")
+            HydrologicalCorrector = None
+
+    # Only proceed with conditioning if we successfully imported the class
+    if HydrologicalCorrector is not None:
+        # Initialize hydrological corrector
+        hydro_corrector = HydrologicalCorrector()
+        
+        # Generate path for hydrologically corrected DEM
+        dem_path_obj = Path(dem_path)
+        corrected_dem_path = dem_path_obj.parent / f"{dem_path_obj.stem}_hydrocorrected{dem_path_obj.suffix}"
+        
+        print(f"🎯 Input DEM: {dem_path}")
+        print(f"🎯 Output DEM: {corrected_dem_path}")
+        
+        # Check if corrected DEM already exists
+        if corrected_dem_path.exists() and not overwrite:
+            print(f"✅ Found existing hydrologically corrected DEM")
+            print(f"📁 Cached: {corrected_dem_path}")
+            status = "📁 Cached"
+        else:
+            status = "🔧 Processing"
+        
+        print(f"🔄 Status: {status}")
+        
+        # Apply hydrological conditioning using configuration settings
+        try:
+            corrected_path, conditioning_stats = hydro_corrector.condition_dem(
+                input_dem_path=dem_path,
+                output_dem_path=corrected_dem_path,
+                algorithm=algorithm,  # Use config-specified algorithm
+                overwrite=overwrite   # Use config setting for overwrite
+            )
+            
+            print(f"\n✅ HYDROLOGICAL CONDITIONING COMPLETED!")
+            print(f"🏔️  Algorithm: {conditioning_stats.get('algorithm_used', 'auto-selected')}")
+            print(f"🕳️  Pits filled: {conditioning_stats.get('pits_filled', 'N/A'):,}")
+            print(f"📏 Max fill depth: {conditioning_stats.get('max_fill_depth', 0):.2f}m")
+            print(f"💧 Total fill volume: {conditioning_stats.get('total_fill_volume', 0):.2f}m³")
+            print(f"📊 Cells affected: {conditioning_stats.get('percent_cells_filled', 0):.2f}%")
+            
+            # Create comparison visualization
+            comparison_path = hydro_corrector.create_conditioning_comparison(
+                original_dem_path=dem_path,
+                conditioned_dem_path=corrected_path,
+                output_path=output_dir / 'hydrological_conditioning_comparison.png'
+            )
+            
+            print(f"📈 Comparison plot: {comparison_path}")
+            
+            # Update dem_path to use the corrected version for subsequent analysis
+            dem_path = str(corrected_path)
+            dem_type = "Hydrologically Corrected"
+            print(f"\n🔄 Updated DEM path for analysis: {dem_path}")
+            
+        except Exception as e:
+            print(f"❌ Hydrological conditioning failed: {e}")
+            print(f"🔄 Continuing with original DEM: {dem_path}")
+            # Keep original dem_path if conditioning fails
+            dem_type = "Original"
+
+    else:
+        print("⚠️  Hydrological conditioning skipped due to import issues")
+        print(f"🔄 Continuing with original DEM: {dem_path}")
+        dem_type = "Original"
+        
+else:
+    print("⚠️  Hydrological conditioning disabled in configuration")
+    print(f"🔄 Using original DEM as specified: {dem_path}")
+    dem_type = "Original"
+
+# Set global variable for DEM type to be used in reports
+print(f"\n📋 Final DEM Configuration:")
+print(f"   • DEM Type: {dem_type}")
+print(f"   • DEM Path: {dem_path}")
+print(f"   • Analysis will proceed with this DEM for all subsequent sections")
+```
+
+### Impact Assessment and Quality Control
+
+The hydrological conditioning process significantly improves the quality of the DEM for flood risk assessment applications. By removing artificial pits and ensuring proper flow connectivity, the conditioned DEM provides a more realistic representation of surface water flow patterns.
+
+**Key Quality Improvements:**
+
+- **Elimination of Spurious Sinks**: Removes artificial depressions that would trap flow
+- **Enhanced Flow Routing**: Ensures water can flow naturally from any point to the watershed outlet  
+- **Improved Flow Accumulation**: More accurate calculation of upstream drainage areas
+- **Better Stream Network Delineation**: Clearer definition of natural drainage patterns
+
+The Wang & Liu algorithm preserves the essential topographic characteristics while making minimal modifications necessary for hydrological correctness. This balance ensures that the flood risk assessment results remain representative of actual terrain conditions while benefiting from improved flow modeling accuracy.
+
 ## EXZECO Analysis {#sec-exzeco}
 
 ### Theoretical Foundation of the EXZECO Methodology
@@ -470,6 +663,34 @@ The EXZECO (EXtraction de Zones ECOulement) methodology represents a novel appro
 4. **Probabilistic Risk Assessment**: Statistical aggregation of simulation outcomes
 
 The methodology is particularly valuable for preliminary assessments, regional-scale studies, and situations where traditional hydraulic modeling approaches are computationally prohibitive or data-limited.
+
+### DEM Selection Validation
+
+Before proceeding with the analysis, it's important to confirm which DEM will be used based on the configuration settings and conditioning results.
+
+```{python}
+#| label: dem-validation
+#| echo: true
+
+print("📋 DEM SELECTION VALIDATION")
+print("=" * 50)
+print(f"🏔️  DEM Type: {dem_type}")
+print(f"📁 DEM Path: {dem_path}")
+print(f"🔍 File exists: {Path(dem_path).exists()}")
+
+if Path(dem_path).exists():
+    print(f"📏 File size: {Path(dem_path).stat().st_size / 1024 / 1024:.1f} MB")
+    
+    # Read basic DEM info for confirmation
+    import rasterio
+    with rasterio.open(dem_path) as src:
+        print(f"📐 Dimensions: {src.width} x {src.height} pixels")
+        print(f"🌍 CRS: {src.crs}")
+        print(f"📏 Resolution: {src.res[0]:.1f} x {src.res[1]:.1f} meters")
+        
+print(f"\n✅ Analysis will proceed with {dem_type} DEM")
+print(f"🎯 All subsequent sections will use this DEM for consistency")
+```
 
 ### Drainage Area Threshold Analysis
 
@@ -1123,7 +1344,7 @@ export_result = export_risk_analysis(
     risk_df=risk_df,
     risk_data=risk_data,
     output_dir=output_dir,
-    config=config,
+    config=config_with_dem_info,  # Use config with DEM type information
     formats=['csv', 'excel', 'json']
 )
 
@@ -1154,6 +1375,11 @@ sys.path.append('../src')  # Add src directory to path
 from export import export_exzeco_results
 
 # Export all results using the dedicated export function
+# Add DEM type information to config for export metadata
+config_with_dem_info = config.copy()
+config_with_dem_info['dem_type'] = dem_type
+config_with_dem_info['dem_path_used'] = dem_path
+
 export_info = export_exzeco_results(
     analyzer=analyzer,
     results=results,
@@ -1196,12 +1422,17 @@ sys.path.append('../src')  # Add src directory to path
 from write_final_report import write_final_report
 
 # Generate the final HTML report using the dedicated script
+# Include DEM type information in config for report metadata
+config_for_report = config.copy()
+config_for_report['dem_type'] = dem_type
+config_for_report['dem_path_used'] = dem_path
+
 report_result = write_final_report(
     risk_df=risk_df,
     study_bounds=STUDY_BOUNDS,
     area_km2=area_km2,
     dem_stats=dem_stats,
-    config=config,
+    config=config_for_report,
     output_dir=output_dir,
     filename='exzeco_final_report.html'
 )

@@ -21,7 +21,11 @@ from tqdm import tqdm
 from joblib import Parallel, delayed
 import logging
 
-from .flow_analysis import FlowAnalyzer
+# Handle FlowAnalyzer import with fallback
+try:
+    from .flow_analysis import FlowAnalyzer
+except ImportError:
+    from flow_analysis import FlowAnalyzer
 
 logger = logging.getLogger(__name__)
 

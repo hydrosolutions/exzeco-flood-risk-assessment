@@ -41,6 +41,21 @@ import shutil
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
+# Import FlowAnalyzer for hydrological conditioning
+try:
+    from .core.flow_analysis import FlowAnalyzer
+except ImportError:
+    # Fallback for when running as script or from notebook
+    try:
+        from core.flow_analysis import FlowAnalyzer
+    except ImportError:
+        # Last fallback - add current directory to path
+        import sys
+        import os
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        sys.path.append(current_dir)
+        from core.flow_analysis import FlowAnalyzer
+
 
 class DEMDownloader:
     """
@@ -862,3 +877,360 @@ if __name__ == "__main__":
     # Create hillshade
     hillshade = downloader.create_hillshade(dem_path)
     print(f"Hillshade shape: {hillshade.shape}")
+
+
+class HydrologicalCorrector:
+    """
+    Hydrological conditioning for Digital Elevation Models using Wang & Liu algorithm.
+    
+    This class provides a clean interface to perform hydrological conditioning on DEMs
+    by wrapping the FlowAnalyzer implementation. It handles file I/O, preserves
+    geospatial metadata, and provides options for different conditioning algorithms.
+    """
+    
+    def __init__(self):
+        """Initialize the hydrological corrector."""
+        self.flow_analyzer = FlowAnalyzer()
+        
+    def condition_dem(self, 
+                      input_dem_path: Union[str, Path],
+                      output_dem_path: Optional[Union[str, Path]] = None,
+                      algorithm: str = 'auto',
+                      lakes_shapefile: Optional[str] = None,
+                      overwrite: bool = False) -> Tuple[Path, dict]:
+        """
+        Apply hydrological conditioning to a DEM using optimized algorithms.
+        
+        This method performs pit filling to remove artificial depressions that would
+        prevent natural flow routing in the DEM. The algorithm is automatically selected
+        based on DEM size for optimal performance.
+        
+        Parameters
+        ----------
+        input_dem_path : str or Path
+            Path to input DEM file
+        output_dem_path : str or Path, optional
+            Path for output conditioned DEM. If None, adds '_hydrocorrected' suffix
+        algorithm : str, default 'auto'
+            Algorithm to use: 'auto' (recommended), 'wang_liu', 'priority_flood'
+            - 'auto': Selects best algorithm based on DEM size
+            - 'priority_flood': Fast for small DEMs (<1M cells)
+            - 'wang_liu': Optimized for larger DEMs
+        lakes_shapefile : str, optional
+            Path to shapefile containing real depressions (lakes) to preserve
+        overwrite : bool, default False
+            Whether to overwrite existing output file
+            
+        Returns
+        -------
+        Tuple[Path, dict]
+            - Path to conditioned DEM file
+            - Dictionary with conditioning statistics
+        """
+        input_path = Path(input_dem_path)
+        
+        if not input_path.exists():
+            raise FileNotFoundError(f"Input DEM not found: {input_path}")
+        
+        # Generate output path if not provided
+        if output_dem_path is None:
+            output_path = input_path.parent / f"{input_path.stem}_hydrocorrected{input_path.suffix}"
+        else:
+            output_path = Path(output_dem_path)
+        
+        # Check if output already exists
+        if output_path.exists() and not overwrite:
+            logger.info(f"Conditioned DEM already exists: {output_path}")
+            return output_path, self._get_conditioning_stats(input_path, output_path)
+        
+        # Read input DEM to get size info for algorithm selection
+        with rasterio.open(input_path) as src:
+            dem_data = src.read(1, masked=True)
+            profile = src.profile.copy()
+            transform = src.transform
+            crs = src.crs
+            nodata = src.nodata
+            original_dtype = src.dtypes[0]
+            rows, cols = dem_data.shape
+            total_cells = rows * cols
+        
+        # Auto-select algorithm based on DEM size
+        if algorithm == 'auto':
+            if total_cells < 1e6:  # Less than 1M cells (e.g., 1000x1000)
+                algorithm = 'priority_flood'
+                logger.info(f"Auto-selected priority_flood for small DEM ({rows}x{cols} = {total_cells:,} cells)")
+            else:
+                algorithm = 'wang_liu'  
+                logger.info(f"Auto-selected wang_liu for large DEM ({rows}x{cols} = {total_cells:,} cells)")
+        else:
+            logger.info(f"Using manually selected algorithm: {algorithm}")
+        
+        logger.info(f"Applying hydrological conditioning using {algorithm} algorithm...")
+        logger.info(f"Input: {input_path}")
+        logger.info(f"Output: {output_path}")
+        logger.info(f"Input DEM info: dtype={original_dtype}, nodata={nodata}, shape={dem_data.shape}")
+        
+        # Convert to float64 for processing (required for NaN handling)
+        if hasattr(dem_data, 'mask'):
+            # Handle masked array
+            dem_array = dem_data.astype(np.float64, copy=True)
+            dem_array[dem_data.mask] = np.nan
+        else:
+            # Handle regular array
+            dem_array = dem_data.astype(np.float64, copy=True)
+            if nodata is not None:
+                dem_array[dem_array == nodata] = np.nan
+        
+        logger.info(f"Converted to float64 for processing: {np.sum(~np.isnan(dem_array))} valid cells out of {dem_array.size}")
+        
+        # Apply hydrological conditioning with selected algorithm
+        try:
+            conditioned_dem, depression_depth = self.flow_analyzer.fill_pits(
+                dem_array, 
+                lakes_shapefile=lakes_shapefile,
+                algorithm=algorithm
+            )
+            logger.info("Hydrological conditioning completed successfully")
+        except Exception as e:
+            logger.error(f"Hydrological conditioning failed: {e}")
+            raise
+        
+        # Prepare output data with proper data type handling
+        if np.issubdtype(original_dtype, np.integer):
+            # For integer DEMs, convert back to original type
+            if nodata is not None:
+                # Use original nodata value
+                output_nodata = nodata
+                conditioned_output = np.where(np.isnan(conditioned_dem), output_nodata, conditioned_dem)
+                conditioned_output = conditioned_output.astype(original_dtype)
+            else:
+                # For integer DEMs without nodata, use a reasonable nodata value
+                if np.issubdtype(original_dtype, np.signedinteger):
+                    output_nodata = np.iinfo(original_dtype).min
+                else:
+                    output_nodata = 0
+                conditioned_output = np.where(np.isnan(conditioned_dem), output_nodata, conditioned_dem)
+                conditioned_output = conditioned_output.astype(original_dtype)
+        else:
+            # For float DEMs, keep as float and use NaN or original nodata
+            if nodata is not None:
+                output_nodata = nodata
+                conditioned_output = np.where(np.isnan(conditioned_dem), output_nodata, conditioned_dem)
+            else:
+                output_nodata = np.nan
+                conditioned_output = conditioned_dem
+            conditioned_output = conditioned_output.astype(original_dtype)
+        
+        logger.info(f"Prepared output: dtype={conditioned_output.dtype}, nodata={output_nodata}")
+            
+        # Update profile for output
+        profile.update({
+            'dtype': conditioned_output.dtype,
+            'nodata': output_nodata,
+            'compress': 'lzw',
+            'tiled': True,
+            'blockxsize': 512,
+            'blockysize': 512
+        })
+        
+        # Write conditioned DEM
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with rasterio.open(output_path, 'w', **profile) as dst:
+            dst.write(conditioned_output, 1)
+            
+            # Add metadata about conditioning
+            dst.update_tags(
+                conditioning_algorithm=algorithm,
+                conditioning_date=str(np.datetime64('now')),
+                source_dem=str(input_path),
+                hydrological_conditioning="Wang & Liu (2006) pit filling algorithm"
+            )
+        
+        # Calculate conditioning statistics
+        stats = self._calculate_conditioning_stats(dem_array, conditioned_dem, depression_depth, algorithm)
+        
+        logger.info(f"Hydrological conditioning completed successfully!")
+        logger.info(f"  - Algorithm: {algorithm}")
+        logger.info(f"  - Pits filled: {stats['pits_filled']:,}")
+        logger.info(f"  - Max fill depth: {stats['max_fill_depth']:.2f}m")
+        logger.info(f"  - Total fill volume: {stats['total_fill_volume']:.2f}m³")
+        logger.info(f"  - Output file: {output_path}")
+        
+        return output_path, stats
+    
+    def _calculate_conditioning_stats(self, original_dem: np.ndarray, 
+                                    conditioned_dem: np.ndarray,
+                                    depression_depth: np.ndarray,
+                                    algorithm: str = 'unknown') -> dict:
+        """Calculate statistics about the conditioning process."""
+        
+        # Only consider valid (non-NaN) cells
+        valid_mask = ~np.isnan(original_dem)
+        
+        if not np.any(valid_mask):
+            return {
+                'pits_filled': 0,
+                'max_fill_depth': 0.0,
+                'mean_fill_depth': 0.0,
+                'total_fill_volume': 0.0,
+                'area_affected_km2': 0.0,
+                'algorithm_used': algorithm
+            }
+        
+        # Calculate fill depths
+        fill_depths = depression_depth[valid_mask]
+        filled_cells = fill_depths > 1e-6  # Small threshold to avoid floating point errors
+        
+        stats = {
+            'pits_filled': int(np.sum(filled_cells)),
+            'max_fill_depth': float(np.max(fill_depths)) if len(fill_depths) > 0 else 0.0,
+            'mean_fill_depth': float(np.mean(fill_depths[filled_cells])) if np.any(filled_cells) else 0.0,
+            'total_fill_volume': float(np.sum(fill_depths)),
+            'area_affected_km2': float(np.sum(filled_cells) * 900 / 1e6),  # Assuming 30m pixels
+            'algorithm_used': algorithm,
+            'total_valid_cells': int(np.sum(valid_mask)),
+            'percent_cells_filled': float(100 * np.sum(filled_cells) / np.sum(valid_mask)) if np.any(valid_mask) else 0.0
+        }
+        
+        return stats
+    
+    def _get_conditioning_stats(self, input_path: Path, output_path: Path) -> dict:
+        """Get conditioning statistics from existing files."""
+        try:
+            with rasterio.open(input_path) as src_orig:
+                original_dem = src_orig.read(1, masked=True)
+                orig_nodata = src_orig.nodata
+                
+            with rasterio.open(output_path) as src_cond:
+                conditioned_dem = src_cond.read(1, masked=True)
+                cond_nodata = src_cond.nodata
+                
+            # Convert to float64 for calculations
+            if hasattr(original_dem, 'mask'):
+                orig_array = original_dem.astype(np.float64, copy=True)
+                orig_array[original_dem.mask] = np.nan
+                cond_array = conditioned_dem.astype(np.float64, copy=True)
+                cond_array[conditioned_dem.mask] = np.nan
+            else:
+                orig_array = original_dem.astype(np.float64, copy=True)
+                cond_array = conditioned_dem.astype(np.float64, copy=True)
+                
+                # Handle nodata values
+                if orig_nodata is not None:
+                    orig_array[original_dem == orig_nodata] = np.nan
+                if cond_nodata is not None:
+                    cond_array[conditioned_dem == cond_nodata] = np.nan
+            
+            depression_depth = cond_array - orig_array
+            depression_depth = np.maximum(depression_depth, 0)  # Only positive depths
+            
+            return self._calculate_conditioning_stats(orig_array, cond_array, depression_depth)
+            
+        except Exception as e:
+            logger.warning(f"Could not calculate conditioning statistics: {e}")
+            return {'algorithm': 'wang_liu', 'error': str(e)}
+    
+    def create_conditioning_comparison(self, 
+                                     original_dem_path: Union[str, Path],
+                                     conditioned_dem_path: Union[str, Path],
+                                     output_path: Optional[Union[str, Path]] = None) -> Path:
+        """
+        Create a visualization comparing original and conditioned DEMs.
+        
+        Parameters
+        ----------
+        original_dem_path : str or Path
+            Path to original DEM
+        conditioned_dem_path : str or Path
+            Path to conditioned DEM
+        output_path : str or Path, optional
+            Path for output visualization. If None, saves next to conditioned DEM
+            
+        Returns
+        -------
+        Path
+            Path to created visualization
+        """
+        import matplotlib.pyplot as plt
+        import matplotlib.colors as mcolors
+        
+        # Read DEMs
+        with rasterio.open(original_dem_path) as src:
+            original_dem = src.read(1, masked=True)
+            extent = [src.bounds.left, src.bounds.right, src.bounds.bottom, src.bounds.top]
+            orig_nodata = src.nodata
+            
+        with rasterio.open(conditioned_dem_path) as src:
+            conditioned_dem = src.read(1, masked=True)
+            cond_nodata = src.nodata
+        
+        # Calculate difference (fill depth) with proper data type handling
+        if hasattr(original_dem, 'mask'):
+            orig_array = original_dem.astype(np.float64, copy=True)
+            orig_array[original_dem.mask] = np.nan
+            cond_array = conditioned_dem.astype(np.float64, copy=True)
+            cond_array[conditioned_dem.mask] = np.nan
+        else:
+            orig_array = original_dem.astype(np.float64, copy=True)
+            cond_array = conditioned_dem.astype(np.float64, copy=True)
+            
+            # Handle nodata values
+            if orig_nodata is not None:
+                orig_array[original_dem == orig_nodata] = np.nan
+            if cond_nodata is not None:
+                cond_array[conditioned_dem == cond_nodata] = np.nan
+        
+        fill_depth = cond_array - orig_array
+        fill_depth = np.maximum(fill_depth, 0)
+        
+        # Create comparison plot
+        fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+        
+        # Original DEM
+        im1 = axes[0].imshow(orig_array, extent=extent, cmap='terrain', interpolation='bilinear')
+        axes[0].set_title('Original DEM', fontsize=14)
+        axes[0].set_xlabel('Longitude')
+        axes[0].set_ylabel('Latitude')
+        plt.colorbar(im1, ax=axes[0], label='Elevation (m)')
+        
+        # Conditioned DEM
+        im2 = axes[1].imshow(cond_array, extent=extent, cmap='terrain', interpolation='bilinear')
+        axes[1].set_title('Hydrologically Conditioned DEM\n(Wang & Liu Algorithm)', fontsize=14)
+        axes[1].set_xlabel('Longitude')
+        axes[1].set_ylabel('Latitude')
+        plt.colorbar(im2, ax=axes[1], label='Elevation (m)')
+        
+        # Fill depth
+        fill_max = np.nanmax(fill_depth)
+        if fill_max > 0:
+            # Custom colormap for fill depth
+            colors = ['white', 'lightblue', 'blue', 'darkblue', 'purple']
+            n_bins = 100
+            cmap = mcolors.LinearSegmentedColormap.from_list('fill_depth', colors, N=n_bins)
+            
+            im3 = axes[2].imshow(fill_depth, extent=extent, cmap=cmap, 
+                               vmin=0, vmax=fill_max, interpolation='bilinear')
+            axes[2].set_title(f'Pit Fill Depth\n(Max: {fill_max:.2f}m)', fontsize=14)
+            axes[2].set_xlabel('Longitude')
+            axes[2].set_ylabel('Latitude')
+            plt.colorbar(im3, ax=axes[2], label='Fill Depth (m)')
+        else:
+            axes[2].text(0.5, 0.5, 'No pits filled', ha='center', va='center', 
+                        transform=axes[2].transAxes, fontsize=16)
+            axes[2].set_title('Pit Fill Depth\n(No pits detected)', fontsize=14)
+        
+        plt.tight_layout()
+        
+        # Save plot
+        if output_path is None:
+            conditioned_path = Path(conditioned_dem_path)
+            output_path = conditioned_path.parent / f"{conditioned_path.stem}_comparison.png"
+        else:
+            output_path = Path(output_path)
+        
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        logger.info(f"Conditioning comparison saved to: {output_path}")
+        return output_path

@@ -37,15 +37,27 @@ from pathlib import Path
 import yaml
 import logging
 
-# Import new core modules
-from .core import (
-    FlowAnalyzer,
-    MonteCarloSimulator,
-    GeometryProcessor,
-    DrainageClassifier,
-    ClassificationThresholds,
-    ResultExporter
-)
+# Import new core modules with fallback for relative imports
+try:
+    # Try relative import first (when used as package)
+    from .core import (
+        FlowAnalyzer,
+        MonteCarloSimulator,
+        GeometryProcessor,
+        DrainageClassifier,
+        ClassificationThresholds,
+        ResultExporter
+    )
+except ImportError:
+    # Fallback to absolute import (when running as script or from notebook)
+    from core import (
+        FlowAnalyzer,
+        MonteCarloSimulator,
+        GeometryProcessor,
+        DrainageClassifier,
+        ClassificationThresholds,
+        ResultExporter
+    )
 
 # Configure logging
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
