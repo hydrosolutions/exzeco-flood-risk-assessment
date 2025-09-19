@@ -715,45 +715,45 @@ The determination of an appropriate drainage area threshold constitutes a critic
 print("🎯 FINDING APPROPRIATE DRAINAGE AREA THRESHOLD")
 print("=" * 55)
 
-# Create temporary analyzer to analyze flow accumulation
-temp_config = ExzecoConfig(
-    noise_levels=[0.2, 0.4],  
-    iterations=5,  
-    min_drainage_area=0.001,  
-    n_jobs=1  
-)
+# # Create temporary analyzer to analyze flow accumulation
+# temp_config = ExzecoConfig(
+#     noise_levels=[0.2, 0.4],  
+#     iterations=5,  
+#     min_drainage_area=0.001,  
+#     n_jobs=1  
+# )
 
-temp_analyzer = ExzecoAnalysis(temp_config)
-temp_analyzer.load_dem(dem_path)
+# temp_analyzer = ExzecoAnalysis(temp_config)
+# temp_analyzer.load_dem(dem_path)
 
-# Calculate flow accumulation for original DEM
-flow_dir, slopes = temp_analyzer.compute_flow_direction(temp_analyzer.dem_data)
-flow_acc = temp_analyzer.compute_flow_accumulation(flow_dir)
+# # Calculate flow accumulation for original DEM
+# flow_dir, slopes = temp_analyzer.compute_flow_direction(temp_analyzer.dem_data)
+# flow_acc = temp_analyzer.compute_flow_accumulation(flow_dir)
 
-# Convert to drainage area
-pixel_area_km2 = (temp_analyzer.resolution_x * temp_analyzer.resolution_y) / 1e6
-drainage_area = flow_acc * pixel_area_km2
+# # Convert to drainage area
+# pixel_area_km2 = (temp_analyzer.resolution_x * temp_analyzer.resolution_y) / 1e6
+# drainage_area = flow_acc * pixel_area_km2
 
-print(f"Drainage area statistics:")
-print(f"  Single pixel area: {pixel_area_km2:.6f} km²")
-print(f"  Min drainage: {np.min(drainage_area):.6f} km²")
-print(f"  Max drainage: {np.max(drainage_area):.6f} km²")
-print(f"  90th percentile: {np.percentile(drainage_area, 90):.6f} km²")
-print(f"  95th percentile: {np.percentile(drainage_area, 95):.6f} km²")
-print(f"  99th percentile: {np.percentile(drainage_area, 99):.6f} km²")
+# print(f"Drainage area statistics:")
+# print(f"  Single pixel area: {pixel_area_km2:.6f} km²")
+# print(f"  Min drainage: {np.min(drainage_area):.6f} km²")
+# print(f"  Max drainage: {np.max(drainage_area):.6f} km²")
+# print(f"  90th percentile: {np.percentile(drainage_area, 90):.6f} km²")
+# print(f"  95th percentile: {np.percentile(drainage_area, 95):.6f} km²")
+# print(f"  99th percentile: {np.percentile(drainage_area, 99):.6f} km²")
 
-# Test different thresholds to find appropriate one
-thresholds_to_test = config.noise_levels  # Use config values
-print(f"\n📊 Testing different drainage area thresholds:")
-for thresh in thresholds_to_test:
-    pixels_above = np.sum(drainage_area >= thresh)
-    percent_above = 100 * pixels_above / drainage_area.size
-    print(f"  {thresh:0.2f} km²: {pixels_above:,} pixels ({percent_above:.1f}%)")
+# # Test different thresholds to find appropriate one
+# thresholds_to_test = config.noise_levels  # Use config values
+# print(f"\n📊 Testing different drainage area thresholds:")
+# for thresh in thresholds_to_test:
+#     pixels_above = np.sum(drainage_area >= thresh)
+#     percent_above = 100 * pixels_above / drainage_area.size
+#     print(f"  {thresh:0.2f} km²: {pixels_above:,} pixels ({percent_above:.1f}%)")
 
-# Choose threshold that includes 10-30% of study area (typical for EXZECO)
-appropriate_threshold = 0.05  # km²
-print(f"\n🎯 Selected threshold: {appropriate_threshold} km²")
-print(f"   This represents {appropriate_threshold/pixel_area_km2:.0f} pixels minimum")
+# # Choose threshold that includes 10-30% of study area (typical for EXZECO)
+# appropriate_threshold = 0.05  # km²
+# print(f"\n🎯 Selected threshold: {appropriate_threshold} km²")
+# print(f"   This represents {appropriate_threshold/pixel_area_km2:.0f} pixels minimum")
 
 # Select hand-picked threshold and override automatically determined one (uncomment if needed)
 print(f"Manual setting threshold to 0.1 km²")
@@ -1350,7 +1350,7 @@ export_result = export_risk_analysis(
     risk_df=risk_df,
     risk_data=risk_data,
     output_dir=output_dir,
-    config=config_with_dem_info,  # Use config with DEM type information
+    config=config,  # Use original ExzecoConfig object
     formats=['csv', 'excel', 'json']
 )
 
