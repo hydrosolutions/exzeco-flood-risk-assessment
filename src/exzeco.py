@@ -321,7 +321,7 @@ class ExzecoAnalysis:
         dem = np.where(dem < -9999, np.nan, dem)
         
         # Fill pits (essential for flow routing) - use FlowAnalyzer
-        dem_filled = self.flow_analyzer.fill_pits(dem)
+        dem_filled, depression_depth = self.flow_analyzer.fill_pits(dem)
         
         self.dem_data = dem_filled
         self.shape = dem_filled.shape

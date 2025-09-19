@@ -227,8 +227,13 @@ print(f"  Iterations: {config.iterations}")
 print(f"  Min drainage area: {config.min_drainage_area} km²")
 print(f"  Parallel jobs: {config.n_jobs}")
 
+# Load raw config for DEM settings (since ExzecoConfig doesn't include DEM params)
+import yaml
+with open('../config/config.yml', 'r') as f:
+    raw_config = yaml.safe_load(f)
+
 # Validate DEM conditioning configuration
-dem_config = config.get('dem', {})
+dem_config = raw_config.get('dem', {})
 use_hydrocorrected = dem_config.get('use_hydrocorrected', True)
 conditioning_config = dem_config.get('conditioning', {})
 conditioning_algorithm = conditioning_config.get('algorithm', 'auto')
@@ -515,9 +520,9 @@ from pathlib import Path
 print("🌊 HYDROLOGICAL CONDITIONING (CONFIGURATION-DRIVEN)")
 print("=" * 60)
 
-# Read configuration settings for DEM conditioning
-use_hydrocorrected = config.get('use_hydrocorrected', True)
-conditioning_config = config.get('conditioning', {})
+# Read configuration settings for DEM conditioning from raw config
+use_hydrocorrected = dem_config.get('use_hydrocorrected', True)
+conditioning_config = dem_config.get('conditioning', {})
 algorithm = conditioning_config.get('algorithm', 'auto')
 overwrite = conditioning_config.get('overwrite', False)
 
@@ -751,10 +756,11 @@ print(f"\n🎯 Selected threshold: {appropriate_threshold} km²")
 print(f"   This represents {appropriate_threshold/pixel_area_km2:.0f} pixels minimum")
 
 # Select hand-picked threshold and override automatically determined one (uncomment if needed)
+print(f"Manual setting threshold to 0.1 km²")
 appropriate_threshold = 0.1 # km²
 ```
 
-### Monte Carlo Simulation Implementation
+### Monte Carlo Simulation
 
 The Monte Carlo simulation represents the core computational engine of the EXZECO methodology. This stochastic approach generates multiple realizations of the Digital Elevation Model by adding spatially uniform random noise within specified uncertainty bounds, then computes flow accumulation for each realization.
 
@@ -1376,7 +1382,7 @@ from export import export_exzeco_results
 
 # Export all results using the dedicated export function
 # Add DEM type information to config for export metadata
-config_with_dem_info = config.copy()
+config_with_dem_info = raw_config.copy()
 config_with_dem_info['dem_type'] = dem_type
 config_with_dem_info['dem_path_used'] = dem_path
 
@@ -1423,7 +1429,7 @@ from write_final_report import write_final_report
 
 # Generate the final HTML report using the dedicated script
 # Include DEM type information in config for report metadata
-config_for_report = config.copy()
+config_for_report = raw_config.copy()
 config_for_report['dem_type'] = dem_type
 config_for_report['dem_path_used'] = dem_path
 
